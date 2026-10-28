@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- ClassRoom mark: plus / divide / equals on an ink tile (from Logo.tsx). -->
+  <rect width="120" height="120" fill="#0f2e29"/>
+  <g transform="translate(24 24) scale(3)" fill="none" stroke-linecap="round" stroke-width="1.9">
+    <path d="M7.4 5.6v4.2M5.3 7.7h4.2" stroke="#5fc6aa"/>
+    <circle cx="16.6" cy="6.1" r="1.05" fill="#f5a524" stroke="none"/>
+    <path d="M14.3 8.6h4.6" stroke="#f5a524"/>
+    <circle cx="16.6" cy="11.1" r="1.05" fill="#f5a524" stroke="none"/>
+    <path d="M5.6 15.6h12.8M5.6 18.9h8.4" stroke="#fbf6ec"/>
+  </g>
+</svg>
