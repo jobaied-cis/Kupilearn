@@ -1,11 +1,12 @@
 import Image from "next/image";
+import Link from "next/link";
 
 export function Logo({ dark = false }: { dark?: boolean }) {
   return (
-    <a aria-label="কুপি — বুঝলে আলো জ্বলে।" className="flex shrink-0 items-center" href="#">
+    <Link aria-label="Kupi — When you understand, the light turns on." className="flex shrink-0 items-center" href="/">
       <span className="relative block h-10">
         <Image
-          alt="কুপি"
+          alt="Kupi"
           width={1204}
           height={516}
           className="h-10 w-auto"
@@ -24,6 +25,6 @@ export function Logo({ dark = false }: { dark?: boolean }) {
           <Image alt="" width={137} height={162} className="logo-flame-flicker size-full" src="/logo/kupi-lamp-flame.png" />
         </span>
       </span>
-    </a>
+    </Link>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Anek_Bangla, Baloo_Da_2, IBM_Plex_Mono } from "next/font/google";
+import { LanguageProvider } from "../lib/i18n";
 import "./globals.css";
 
 const anekBangla = Anek_Bangla({
@@ -21,9 +22,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "কুপি — বুঝলে আলো জ্বলে।",
+  title: "Kupi — When you understand, the light turns on.",
   description:
-    "কুপি ষষ্ঠ থেকে দশম শ্রেণির শিক্ষার্থীদের সব বিষয়ের AI শিক্ষক — NCTB বইয়ের প্রতিটি অধ্যায়, মুখস্থ নয়, তোমার মতো করে বোঝানো, যতক্ষণ না বোঝা হয়।",
+    "Kupi is your AI teacher for every subject — every NCTB chapter explained your way, not memorised, until it truly clicks.",
   icons: { icon: "/app-icon/kupi-favicon-256.png" },
 };
 
@@ -37,8 +38,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="bn" data-scroll-behavior="smooth" className={`${anekBangla.variable} ${balooDa.variable} ${plexMono.variable}`}>
-      <body className="relative min-h-dvh antialiased">{children}</body>
+    <html lang="en" data-scroll-behavior="smooth" className={`${anekBangla.variable} ${balooDa.variable} ${plexMono.variable}`}>
+      <body className="relative min-h-dvh antialiased">
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
     </html>
   );
 }

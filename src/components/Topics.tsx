@@ -1,7 +1,19 @@
+"use client";
+
 import Image from "next/image";
 import { Icon, type IconName } from "./Icon";
 import { SectionHead, TextureOverlay } from "./Hero";
 import { Reveal } from "./Reveal";
+import { pick, useLang } from "../lib/i18n";
+
+const TITLE_EN: Record<string, string> = {
+  "গণিত": "Mathematics",
+  "বিজ্ঞান": "Science",
+  "বাংলা": "Bangla",
+  "ইংরেজি": "English",
+  "সমাজ ও বিশ্বপরিচয়": "Social Science & World Studies",
+  "তথ্য ও যোগাযোগ প্রযুক্তি": "ICT",
+};
 
 type Topic = {
   icon: IconName;
@@ -108,6 +120,7 @@ const TOPICS: Topic[] = [
 ];
 
 export function Topics() {
+  const { lang } = useLang();
   return (
     <>
       <section id="topics" aria-labelledby="topics-title" className="relative overflow-hidden px-4 py-10 sm:px-6 sm:py-12 lg:py-14">
@@ -115,8 +128,8 @@ export function Topics() {
           <TextureOverlay kind="grid" className="opacity-60" />
           <SectionHead
             id="topics-title"
-            title={<>ষষ্ঠ থেকে দশম শ্রেণি — <span className="text-brand-600">সব বিষয়, অধ্যায় ধরে ধরে</span></>}
-            sub="জাতীয় পাঠ্যক্রমের বই অনুসারে সাজানো, তাই স্কুলের পড়ার সাথে মিলিয়েই এগোনো যায়।"
+            title={lang === "bn" ? <>ষষ্ঠ থেকে দশম শ্রেণি — <span className="text-brand-600">সব বিষয়, অধ্যায় ধরে ধরে</span></> : <>Class 6 to 10 — <span className="text-brand-600">every subject, chapter by chapter</span></>}
+            sub={pick(lang, "Organised by the national curriculum books, so it moves together with your school study.", "জাতীয় পাঠ্যক্রমের বই অনুসারে সাজানো, তাই স্কুলের পড়ার সাথে মিলিয়েই এগোনো যায়।")}
           />
           <ul className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {TOPICS.map((topic, i) => (
@@ -141,12 +154,12 @@ export function Topics() {
                         className="h-16 w-auto shrink-0 rounded-md border border-paper-edge object-cover shadow-hard-sm"
                       />
                       {topic.live ? (
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold tracking-wide text-brand-700">চালু আছে</span>
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold tracking-wide text-brand-700">{pick(lang, "Live now", "চালু আছে")}</span>
                       ) : (
-                        <span className="shrink-0 rounded-full border border-ink/15 bg-paper px-3 py-1 text-xs font-semibold text-ink-muted">শীঘ্রই আসছে</span>
+                        <span className="shrink-0 rounded-full border border-ink/15 bg-paper px-3 py-1 text-xs font-semibold text-ink-muted">{pick(lang, "Coming soon", "শীঘ্রই আসছে")}</span>
                       )}
                     </div>
-                    <h3 className={`mt-3 text-[1.05rem] leading-snug ${topic.live ? "text-ink" : "text-ink-muted"}`}>{topic.title}</h3>
+                    <h3 className={`mt-3 text-[1.05rem] leading-snug ${topic.live ? "text-ink" : "text-ink-muted"}`}>{lang === "bn" ? topic.title : (TITLE_EN[topic.title] ?? topic.title)}</h3>
                     <ul className="mt-3 flex flex-col gap-1.5 border-t border-paper-edge pt-3">
                       {topic.chapters.map(([name, detail]) => (
                         <li key={name} className={`flex items-start gap-2 text-[0.84rem] ${topic.live ? "text-ink-soft" : "text-ink-muted"}`}>
