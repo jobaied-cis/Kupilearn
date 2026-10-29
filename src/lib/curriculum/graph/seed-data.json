@@ -1,0 +1,84 @@
+{
+  "_comment": "Sample CBSE slice: Class 7 Science, Chapter 1 (Nutrition in Plants). Illustrative seed for local dev, tests, and the in-memory driver. Learning-objective text and corpus excerpts are placeholders — replace with verbatim NCF-SE 2023 / NCERT text before production use.",
+  "subjects": [{ "name": "Science" }],
+  "chapters": [
+    {
+      "id": "ch-c7-sci-01",
+      "title": "Nutrition in Plants",
+      "classLevel": 7,
+      "ncertCode": "G7-SCI-01",
+      "subject": "Science",
+      "textbookName": "Science VII"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "c7-sci-nutrients",
+      "name": "Nutrients",
+      "chapterId": "ch-c7-sci-01",
+      "bloomLevel": "remember",
+      "difficulty": 0.2,
+      "masteryThreshold": 0.8,
+      "isThresholdConcept": false
+    },
+    {
+      "id": "c7-sci-nutrition-modes",
+      "name": "Modes of Nutrition",
+      "chapterId": "ch-c7-sci-01",
+      "bloomLevel": "understand",
+      "difficulty": 0.35,
+      "masteryThreshold": 0.8,
+      "isThresholdConcept": false
+    },
+    {
+      "id": "c7-sci-photosynthesis",
+      "name": "Photosynthesis",
+      "chapterId": "ch-c7-sci-01",
+      "bloomLevel": "understand",
+      "difficulty": 0.55,
+      "masteryThreshold": 0.8,
+      "isThresholdConcept": true
+    },
+    {
+      "id": "c7-sci-saprotrophs",
+      "name": "Saprotrophic Nutrition",
+      "chapterId": "ch-c7-sci-01",
+      "bloomLevel": "understand",
+      "difficulty": 0.45,
+      "masteryThreshold": 0.8,
+      "isThresholdConcept": false
+    },
+    {
+      "id": "c7-sci-starch-test",
+      "name": "Testing Leaves for Starch",
+      "chapterId": "ch-c7-sci-01",
+      "bloomLevel": "apply",
+      "difficulty": 0.6,
+      "masteryThreshold": 0.8,
+      "isThresholdConcept": false
+    }
+  ],
+  "prerequisites": [
+    { "from": "c7-sci-nutrients", "to": "c7-sci-nutrition-modes", "type": "hard" },
+    { "from": "c7-sci-nutrition-modes", "to": "c7-sci-photosynthesis", "type": "hard" },
+    { "from": "c7-sci-nutrients", "to": "c7-sci-photosynthesis", "type": "soft" },
+    { "from": "c7-sci-nutrition-modes", "to": "c7-sci-saprotrophs", "type": "hard" },
+    { "from": "c7-sci-photosynthesis", "to": "c7-sci-starch-test", "type": "hard" }
+  ],
+  "objectives": [
+    {
+      "id": "lo-c7-sci-01-1",
+      "text": "Explains the process of photosynthesis and lists the raw materials required.",
+      "competencyCode": "SCI-C7-01",
+      "chapterId": "ch-c7-sci-01",
+      "conceptIds": ["c7-sci-photosynthesis"]
+    },
+    {
+      "id": "lo-c7-sci-01-2",
+      "text": "Classifies modes of nutrition in plants with examples.",
+      "competencyCode": "SCI-C7-02",
+      "chapterId": "ch-c7-sci-01",
+      "conceptIds": ["c7-sci-nutrition-modes", "c7-sci-saprotrophs"]
+    }
+  ]
+}
