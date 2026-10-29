@@ -66,7 +66,15 @@ export class MockLLMClient implements LLMClient {
 
   async generateJSON<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
     this.calls.push(prompt);
-    const marker = /\[TEMPLATE:([ABC])\]/.exec(prompt)?.[1] ?? "A";
+    const marker = /\[TEMPLATE:([A-Z_]+)\]/.exec(prompt)?.[1] ?? "A";
+    if (
+      marker === "CLASSMATE" ||
+      marker === "TEACHER" ||
+      marker === "ASSISTANT" ||
+      marker === "DIRECTOR"
+    ) {
+      return parseOrThrow(JSON.stringify(mockClassroomFixture(marker, prompt)), schema);
+    }
     const concept =
       /Target Concept: (.+)/.exec(prompt)?.[1]?.trim() ??
       /Concepts: (.+)/.exec(prompt)?.[1]?.trim() ??
@@ -155,6 +163,112 @@ function mockRemediation(prompt: string): z.infer<typeof RemediationSchema> {
         `Self-check: name one thing a plant takes from soil and one from air.`,
       ],
     },
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Classroom fixtures (§3 / §4): deterministic agent utterances and     */
+/* director decisions. Shapes mirror the classroom schemas structurally */
+/* (validated against the caller's schema); the mock stays character-   */
+/* faithful — classmate drafts never leak the correct answer.           */
+/* ------------------------------------------------------------------ */
+
+type ClassroomMarker = "CLASSMATE" | "TEACHER" | "ASSISTANT" | "DIRECTOR";
+
+function mockClassroomFixture(marker: ClassroomMarker, prompt: string): unknown {
+  if (marker === "DIRECTOR") return mockDirectorDecision(prompt);
+  const name = /- Display Name: (.+)/.exec(prompt)?.[1]?.trim() ?? "Peer";
+  if (marker === "TEACHER") return mockTeacherUtterance(prompt, name);
+  if (marker === "ASSISTANT") return mockAssistantUtterance(prompt, name);
+  return mockClassmateUtterance(prompt, name);
+}
+
+function mockClassmateUtterance(prompt: string, name: string): unknown {
+  const belief =
+    /- Belief: (.+)/.exec(prompt)?.[1]?.trim() ?? "my usual approach works here";
+  const misconceptionId = /- Misconception ID: (\S+)/.exec(prompt)?.[1]?.trim() ?? null;
+  const brief = /- Question Brief: ([A-Z]+)/.exec(prompt)?.[1] ?? "";
+  const moveType =
+    brief === "RELATED"
+      ? "related_mistake"
+      : brief === "EXTENSION"
+        ? "extension_question"
+        : brief === "BOUNDARY"
+          ? "clarifying_question"
+          : "misconception_exposure";
+  const beliefShort = belief.split(/(?<=\.)\s+/)[0] ?? belief;
+  const text =
+    moveType === "extension_question"
+      ? `Nice — but what happens if we change one number in the problem, ${name} wonders? I still think ${beliefShort}`
+      : moveType === "clarifying_question"
+        ? `Wait, does that definition also cover the edge case I am thinking of? I still think ${beliefShort}`
+        : `I still think ${beliefShort} Can you walk me through where that breaks?`;
+  return {
+    text: text.slice(0, 600),
+    move_type: moveType,
+    misconception_id: misconceptionId,
+    invites_student_response: true,
+    whiteboard_actions: [],
+  };
+}
+
+function mockTeacherUtterance(prompt: string, name: string): unknown {
+  const isCheckpoint = /- Checkpoint Turn: (yes|no)/.exec(prompt)?.[1] === "yes";
+  if (prompt.includes("[REDIRECT]")) {
+    return {
+      text: `Let us pause there and look at the problem together. ${name} will walk through the next step with you.`,
+      move_type: "redirect",
+      misconception_id: null,
+      invites_student_response: false,
+      whiteboard_actions: [],
+    };
+  }
+  if (isCheckpoint) {
+    return {
+      text: "Quick check before we move on: can you tell me the next step in your own words? Just a yes or no first — do you feel ready?",
+      move_type: "checkpoint",
+      misconception_id: null,
+      invites_student_response: true,
+      whiteboard_actions: [],
+    };
+  }
+  return {
+    text: "Think of the equation as a balance scale — whatever you do to one side, you must do to the other. What should we undo first?",
+    move_type: "direct_instruction",
+    misconception_id: null,
+    invites_student_response: true,
+    whiteboard_actions: [],
+  };
+}
+
+function mockAssistantUtterance(prompt: string, name: string): unknown {
+  const isWelcome = /- Welcome Turn: (yes|no)/.exec(prompt)?.[1] === "yes";
+  return {
+    text: isWelcome
+      ? `Welcome to class! I am ${name}, and today we will solve problems together with your teacher and classmates.`
+      : `Over to you — ${name} has the whiteboard ready for the next step.`,
+    move_type: "facilitation",
+    misconception_id: null,
+    invites_student_response: false,
+    whiteboard_actions: [],
+  };
+}
+
+function mockDirectorDecision(prompt: string): unknown {
+  const candidatesLine = /- Candidates: (.+)/.exec(prompt)?.[1]?.trim() ?? "";
+  const lastSpeaker = /- Last Speaker: (\S+)/.exec(prompt)?.[1]?.trim() ?? "none";
+  const scaffold = Number.parseFloat(/Scaffold: ([\d.]+)/.exec(prompt)?.[1] ?? "1") || 0;
+  const candidates: { id: string; priority: number }[] = [];
+  for (const match of candidatesLine.matchAll(/(\S+?)\(\w+,p(\d+)\)/g)) {
+    candidates.push({ id: match[1] as string, priority: Number(match[2]) });
+  }
+  candidates.sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
+  const pick = candidates.find((c) => c.id !== lastSpeaker) ?? candidates[0];
+  return {
+    next_speaker: pick?.id ?? "student",
+    reason: "llm_selected",
+    scaffold_level: Math.max(0, Math.min(1, scaffold)),
+    wait_for_student_seconds: 0,
   };
 }
 

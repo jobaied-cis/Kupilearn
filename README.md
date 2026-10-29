@@ -63,3 +63,39 @@ npm test                     # vitest suite
 npm run seed:graph           # load schema + seed data into Neo4j (needs NEO4J_*)
 docker compose up -d neo4j   # local Neo4j (browser: http://localhost:7474)
 ```
+
+## Multi-Agent Classroom (Director–Agent Registry)
+
+`src/lib/classroom/` implements the orchestration layer as a multi-agent
+classroom, not a single chatbot:
+
+- `registry.ts` — agent registry schema + rules (exactly one teacher, ≥1
+  fallible classmate, teacher outranks all, voice mapping); default
+  1 Teacher + 1 Assistant + 4 Classmates composition.
+- `personas.ts` — per-agent constrained prompts: classmate
+  belief-maintenance (§3.2), teacher adaptive explanation (§3.3),
+  assistant facilitation, director selection.
+- `director.ts` — meta-agent: mandatory turn-taking rules (student
+  priority after peer error, 3-utterance checkpoint cadence,
+  anti-monologue, strategic delay, scaffold fade), five-stage CPS phase
+  machine, LLM selection only when no rule fires, priority fallback.
+- `fidelity.ts` — post-generation persona-drift guardrail; drifted
+  classmate turns regenerate (≤2) then yield to a teacher redirect.
+- `questions.ts` — contextual classmate questions from three triggers
+  (boundary clarification, extension, related mistake).
+- `voice.ts` — TTS provider abstraction (mock/http/google) with
+  per-persona prosody, latency budget constants, and text-mode fallback.
+  The Google backend maps registry voice_ids deterministically to
+  en-IN Neural2 voices and returns base64 MP3 data URLs
+  (`TTS_PROVIDER=google`, needs `GOOGLE_TTS_API_KEY`).
+- `turn.ts` — per-turn pipeline: decide → generate → fidelity-check →
+  synthesize; stateless agents, Director holds authoritative state.
+- `POST /api/classroom/turns` — `{ registry?, state?, student_input?, … }`
+  → `{ decision, turn|null, state, registry }`. `turn` is null when the
+  Director routes to the student or terminates.
+
+Decisions: VAD/STT live client-side (the server consumes text); the
+Director owns `scaffold_level` (the LLM never sets it); phases never
+regress; TTS failure drops the session into sticky text mode with
+throttled classmate interjections. Mock LLM/TTS fixtures keep the full
+loop runnable with zero infra.
