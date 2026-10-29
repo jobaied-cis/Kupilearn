@@ -8,10 +8,11 @@ import { Logo } from "../Logo";
 import { LanguageToggle, pick, useLang } from "../../lib/i18n";
 import { clearProfile, getProfile, type Profile } from "../../lib/profile";
 
-export type DashSection = "home" | "lesson" | "revision" | "practice" | "homework" | "games" | "subjects" | "progress" | "profile" | "subscription" | "learn" | "offline" | "help";
+export type DashSection = "home" | "classroom" | "lesson" | "revision" | "practice" | "homework" | "games" | "subjects" | "progress" | "profile" | "subscription" | "learn" | "offline" | "help";
 
 const PRIMARY: { id: DashSection; icon: IconName; en: string; bn: string; href: string }[] = [
   { id: "home", icon: "home", en: "Home", bn: "হোম", href: "/dashboard" },
+  { id: "classroom", icon: "board", en: "AI Classroom", bn: "AI ক্লাসরুম", href: "/dashboard/classroom" },
   { id: "lesson", icon: "book", en: "Lesson", bn: "লেসন", href: "/dashboard/lesson" },
   { id: "revision", icon: "refresh", en: "Revision", bn: "রিভিশন", href: "/dashboard/revision" },
   { id: "practice", icon: "target", en: "Practice", bn: "অনুশীলন", href: "/dashboard/practice" },
@@ -102,18 +103,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(id);
   }, [router]);
 
-  if (!ready || !profile) {
-    return (
-      <div className="grid min-h-dvh place-items-center px-4">
-        <p className="flex items-center gap-2 text-sm font-semibold text-ink-soft">
-          <Icon name="flame" className="size-5 text-ember" strokeWidth={1.8} />
-          {pick(lang, "Loading your dashboard…", "তোমার ড্যাশবোর্ড লোড হচ্ছে…")}
-        </p>
-      </div>
-    );
-  }
-
-  const initial = profile.name.trim().charAt(0).toUpperCase() || "K";
+  // Instant navigation (Next 16): the page segment must always render.
+  // The old early return dropped `children` until the local profile loaded,
+  // so /dashboard/[section] was dropped from rendering. Render the shell and
+  // children immediately, covered by a loading overlay until the profile
+  // check finishes (or redirects to onboarding).
+  const displayName = profile?.name ?? "Learner";
+  const initial = displayName.trim().charAt(0).toUpperCase() || "K";
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[14rem_minmax(0,1fr)]">
@@ -162,7 +158,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <LanguageToggle />
               <Link href="/dashboard/profile" className="flex items-center gap-2 rounded-full border-2 border-ink bg-white py-0.5 pr-3 pl-0.5 shadow-hard-sm">
                 <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-flame font-display text-sm font-bold text-night">{initial}</span>
-                <span className="max-w-24 truncate text-sm font-bold text-ink">{profile.name}</span>
+                <span className="max-w-24 truncate text-sm font-bold text-ink">{displayName}</span>
               </Link>
             </div>
           </div>
@@ -176,6 +172,14 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {!ready ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-paper px-4" role="status">
+          <p className="flex items-center gap-2 text-sm font-semibold text-ink-soft">
+            <Icon name="flame" className="size-5 text-ember" strokeWidth={1.8} />
+            {pick(lang, "Loading your dashboard\u2026", "\u09a4\u09cb\u09ae\u09be\u09b0 \u09a1\u09cd\u09af\u09be\u09b6\u09ac\u09cb\u09b0\u09cd\u09a1 \u09b2\u09cb\u09a1 \u09b9\u099a\u09cd\u099b\u09c7\u2026")}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

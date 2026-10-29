@@ -12,6 +12,7 @@
     "seed:graph": "node scripts/seed-graph.mjs"
   },
   "dependencies": {
+    "katex": "^0.19.1",
     "neo4j-driver": "^6.2.0",
     "next": "16.4.3",
     "react": "19.3.0",

@@ -43,7 +43,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
   parameterized `queries.ts`, `repository.ts` (Neo4j + in-memory drivers),
   and `seed-data.json` (sample Class 7 Science slice).
 - `textbook/` — NCERT corpus retrieval + §3.2 similarity validator
-  (threshold 0.72; TF cosine by default, embeddings via `EMBEDDINGS_API_URL`).
+  (threshold 0.72; deterministic TF cosine — Meta-only, no embedding endpoint).
 - `prompts.ts` — Templates A (micro-lesson), B (40-min script), C (remediation);
   every instruction block ≤ 200 tokens.
 - `engine.ts` — orchestration: prerequisite audit → textbook retrieval →
@@ -58,7 +58,7 @@ excerpts are illustrative placeholders — replace with verbatim NCF-SE 2023 /
 NCERT text before production use.
 
 ```bash
-cp .env.example .env.local   # memory graph + mock LLM work with zero infra
+cp .env.example .env.local   # fill META_* to go live; empty key = offline lesson mode
 npm test                     # vitest suite
 npm run seed:graph           # load schema + seed data into Neo4j (needs NEO4J_*)
 docker compose up -d neo4j   # local Neo4j (browser: http://localhost:7474)
@@ -83,11 +83,9 @@ classroom, not a single chatbot:
   classmate turns regenerate (≤2) then yield to a teacher redirect.
 - `questions.ts` — contextual classmate questions from three triggers
   (boundary clarification, extension, related mistake).
-- `voice.ts` — TTS provider abstraction (mock/http/google) with
+- `voice.ts` — browser-native speech (client `speechSynthesis`) with
   per-persona prosody, latency budget constants, and text-mode fallback.
-  The Google backend maps registry voice_ids deterministically to
-  en-IN Neural2 voices and returns base64 MP3 data URLs
-  (`TTS_PROVIDER=google`, needs `GOOGLE_TTS_API_KEY`).
+  No third-party TTS; `TTS_PROVIDER=browser|mock`.
 - `turn.ts` — per-turn pipeline: decide → generate → fidelity-check →
   synthesize; stateless agents, Director holds authoritative state.
 - `POST /api/classroom/turns` — `{ registry?, state?, student_input?, … }`
@@ -96,6 +94,35 @@ classroom, not a single chatbot:
 
 Decisions: VAD/STT live client-side (the server consumes text); the
 Director owns `scaffold_level` (the LLM never sets it); phases never
-regress; TTS failure drops the session into sticky text mode with
-throttled classmate interjections. Mock LLM/TTS fixtures keep the full
+regress; Browser-speech failure drops the session into sticky text mode with
+throttled classmate interjections. Offline LLM/TTS fixtures keep the full
 loop runnable with zero infra.
+
+
+## Kupi AI Classroom (Meta-only)
+
+Live classroom: Dashboard → **AI Classroom** (`/dashboard/classroom`).
+
+- **Engines:** Persona Engine (teacher/classmate cards, `src/lib/classroom/`),
+  Lesson & Context Engine (`src/lib/lesson/engine.ts`, `POST /api/lessons`),
+  Learner adaptation (`src/lib/learner/adapt.ts` — behavior signals only,
+  never fixed-intelligence labels), Visualization Engine
+  (`src/components/classroom/Whiteboard.tsx` — KaTeX, SVG chart/timeline/
+  diagram, pause/replay/zoom, subtitles).
+- **Curriculum:** NCTB Classes 6–10, Class → Subject → Chapter → Topic →
+  Micro-lesson (`src/lib/nctb/catalog.ts`). Topic objectives only — no
+  verbatim textbook text is stored.
+- **AI provider:** Meta Llama only, server-side via `META_API_KEY`
+  (never sent to the client). Teacher prompts route to
+  `META_TEACHER_MODEL` (default `Llama-4-Maverick-17B-128E-Instruct-FP8`),
+  classmate/director prompts to `META_CLASSMATE_MODEL` (default
+  `Llama-4-Scout-17B-16E-Instruct-FP8`), with JSON validation, retries,
+  rate limiting and offline fallback. All Groq/Gemini/OpenAI/Azure/Google
+  integrations have been removed; speech is browser-native
+  (`speechSynthesis` / `SpeechRecognition` where supported).
+- **Substitution note (verified 2026-10-29):** Meta's current hosted
+  catalog (`api.meta.ai`) lists Muse models, not Llama 4. If your key is
+  for `api.meta.ai`, set `META_API_BASE_URL=https://api.meta.ai/v1` and
+  point the two model IDs at models your key can access. With no key
+  configured, the app runs the deterministic offline lesson engine and
+  shows an "offline lesson mode" banner — it never fakes a live call.

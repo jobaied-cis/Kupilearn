@@ -8,16 +8,24 @@ import { pick, useLang, type Lang } from "../../lib/i18n";
 import { EDUCATION_LABEL, getProfile } from "../../lib/profile";
 import { GAMES, HOMEWORK, LESSONS, PRACTICE_QS, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
 import type { DashSection } from "./DashboardShell";
+import { ClassroomLive } from "../classroom/ClassroomLive";
 
 const t = (lang: Lang, v: Bi) => (lang === "bn" ? v.bn : v.en);
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN_SM = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none";
 
-function greeting(lang: Lang) {
-  const h = new Date().getHours();
-  if (h < 12) return pick(lang, "Good morning", "শুভ সকাল");
-  if (h < 17) return pick(lang, "Good afternoon", "শুভ দুপুর");
-  return pick(lang, "Good evening", "শুভ সন্ধ্যা");
+function useGreeting(lang: Lang) {
+  // Defer the clock read to the client: reading Date during prerender
+  // blocks static rendering (Next 16 instant navigation).
+  const [hour, setHour] = useState<number | null>(null);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setHour(new Date().getHours()));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  if (hour === null) return pick(lang, "Welcome", "\u09b8\u09cd\u09ac\u09be\u0997\u09a4\u09ae");
+  if (hour < 12) return pick(lang, "Good morning", "\u09b6\u09c1\u09ad \u09b8\u0995\u09be\u09b2");
+  if (hour < 17) return pick(lang, "Good afternoon", "\u09b6\u09c1\u09ad \u09a6\u09c1\u09aa\u09c1\u09b0");
+  return pick(lang, "Good evening", "\u09b6\u09c1\u09ad \u09b8\u09a8\u09cd\u09a7\u09cd\u09af\u09be");
 }
 
 function useName() {
@@ -78,7 +86,7 @@ function HomeView() {
             <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
               <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-ink bg-flame font-display text-[1.15rem] font-bold text-night">{(name || "K").charAt(0).toUpperCase()}</span>
               <div className="min-w-0">
-                <h1 id="greeting" className="truncate text-[1.2rem] leading-tight text-ink sm:text-[1.35rem]">{greeting(lang)}, {name || pick(lang, "Learner", "শিক্ষার্থী")}</h1>
+                <h1 id="greeting" className="truncate text-[1.2rem] leading-tight text-ink sm:text-[1.35rem]">{useGreeting(lang)}, {name || pick(lang, "Learner", "শিক্ষার্থী")}</h1>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[0.8rem] leading-snug text-ink-soft">
                   {eduLabel ? <span className="font-semibold text-ink">{eduLabel}</span> : null}
                   <span aria-hidden="true">·</span><span>{pick(lang, "Ready to learn today?", "আজ শেখার জন্য তৈরি?")}</span>
@@ -334,6 +342,7 @@ function SimpleView({ section }: { section: DashSection }) {
 
 export function DashboardView({ section }: { section: DashSection }) {
   switch (section) {
+    case "classroom": return <ClassroomLive />;
     case "lesson": return <LessonView />;
     case "revision": return <RevisionView />;
     case "practice": return <PracticeView />;

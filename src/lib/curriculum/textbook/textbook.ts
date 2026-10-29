@@ -76,33 +76,9 @@ export function embeddingCosineSimilarity(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
-/**
- * Generic HTTP embedding client (BYO provider): POST {texts} → {vectors}.
- * Configure via EMBEDDINGS_API_URL (+ optional EMBEDDINGS_API_KEY).
- */
-export class HttpEmbeddingClient implements EmbeddingClient {
-  async embed(texts: string[]): Promise<number[][]> {
-    const url = process.env.EMBEDDINGS_API_URL;
-    if (!url) throw new Error("Missing env var EMBEDDINGS_API_URL");
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (process.env.EMBEDDINGS_API_KEY) {
-      headers.authorization = `Bearer ${process.env.EMBEDDINGS_API_KEY}`;
-    }
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ texts }) });
-    if (!res.ok) throw new Error(`Embeddings request failed: ${res.status}`);
-    const data = (await res.json()) as { vectors?: number[][] };
-    if (!Array.isArray(data.vectors)) throw new Error("Embeddings response missing vectors[]");
-    return data.vectors;
-  }
-}
-
 export function createSimilarityScorer(): SimilarityScorer {
-  if (process.env.EMBEDDINGS_API_URL) {
-    const client = new HttpEmbeddingClient();
-    return async (generated, reference) => {
-      const [a, b] = await client.embed([generated, reference]);
-      return embeddingCosineSimilarity(a ?? [], b ?? []);
-    };
-  }
+  // Meta-only: no third-party embedding endpoint. TF cosine is the
+  // deterministic, zero-infra scorer (embeddingCosineSimilarity remains
+  // available for caller-supplied vectors in tests).
   return tfCosineSimilarity;
 }

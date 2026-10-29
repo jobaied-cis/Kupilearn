@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { DashboardView } from "../../../components/dashboard/DashboardViews";
 import type { DashSection } from "../../../components/dashboard/DashboardShell";
 
-const SECTIONS: DashSection[] = ["lesson", "revision", "practice", "homework", "games", "subjects", "progress", "profile", "subscription", "learn", "offline", "help"];
+const SECTIONS: DashSection[] = ["classroom", "lesson", "revision", "practice", "homework", "games", "subjects", "progress", "profile", "subscription", "learn", "offline", "help"];
 
 export function generateStaticParams() {
   return SECTIONS.map((section) => ({ section }));

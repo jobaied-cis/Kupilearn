@@ -10,8 +10,8 @@ import { createLLMClient } from "./llm";
 /**
  * Production wiring from env (see `.env.example`):
  * - CURRICULUM_GRAPH_DRIVER=memory (default) | neo4j
- * - LLM_PROVIDER=mock (default) | http
- * - EMBEDDINGS_API_URL set → embedding similarity, else TF cosine
+ * - LLM_PROVIDER=meta (default, Meta Llama via META_*) | mock (offline)
+ * - Similarity: deterministic TF cosine (Meta-only, no embedding endpoint)
  */
 export function createEngineDeps(): EngineDeps {
   const driver = (process.env.CURRICULUM_GRAPH_DRIVER ?? "memory").toLowerCase();

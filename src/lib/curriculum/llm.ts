@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MetaRoutingClient } from "../meta/meta-client";
 import {
   EngineException,
   MicroLessonSchema,
@@ -37,24 +38,7 @@ function parseOrThrow<T>(raw: string, schema: z.ZodType<T>): T {
   return parsed.data;
 }
 
-/**
- * Generic HTTP client (BYO provider): POST {prompt} to LLM_API_URL, expects
- * {text} or {content} holding a JSON string. Configure via env.
- */
-export class HttpLLMClient implements LLMClient {
-  async generateJSON<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
-    const url = process.env.LLM_API_URL;
-    if (!url) throw new LLMError("Missing env var LLM_API_URL");
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (process.env.LLM_API_KEY) headers.authorization = `Bearer ${process.env.LLM_API_KEY}`;
-    const res = await fetch(url, { method: "POST", headers, body: JSON.stringify({ prompt }) });
-    if (!res.ok) throw new LLMError(`LLM request failed: ${res.status}`);
-    const data = (await res.json()) as { text?: string; content?: string };
-    const raw = data.text ?? data.content;
-    if (typeof raw !== "string") throw new LLMError("LLM response missing text/content");
-    return parseOrThrow(raw, schema);
-  }
-}
+/** Meta-only live client: see src/lib/meta/meta-client.ts (wired in createLLMClient). */
 
 /* ------------------------------------------------------------------ */
 /* Mock client — deterministic fixtures for dev, tests, and demos.     */
@@ -273,8 +257,8 @@ function mockDirectorDecision(prompt: string): unknown {
 }
 
 export function createLLMClient(): LLMClient {
-  const provider = (process.env.LLM_PROVIDER ?? "mock").toLowerCase();
+  const provider = (process.env.LLM_PROVIDER ?? "meta").toLowerCase();
   if (provider === "mock") return new MockLLMClient();
-  if (provider === "http") return new HttpLLMClient();
+  if (provider === "meta") return new MetaRoutingClient(process.env, fetch, new MockLLMClient());
   throw new EngineException("LLM_PROVIDER_UNKNOWN", "", `Unknown LLM_PROVIDER: ${provider}`);
 }
