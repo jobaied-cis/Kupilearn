@@ -7,6 +7,7 @@ import { pick, useLang } from "../../lib/i18n";
 import { revisionFetch } from "../../lib/revision/client";
 import { RevisionSessionRunner } from "./RevisionSessionRunner";
 import { RevisionContentPanel } from "./RevisionContentPanel";
+import { RevisionTrendsPanel } from "./RevisionTrendsPanel";
 import { loadActiveSessionId } from "../../lib/revision/session-runner";
 import type { EnrichedDailyPlan, ExamPrep, RevisionOverview, TargetedQuiz } from "../../lib/revision/service";
 
@@ -169,6 +170,7 @@ export function RevisionDashboard() {
         )}
       </Section>
 
+      <RevisionTrendsPanel conceptLabels={Object.fromEntries(data.mastery.map((row) => [row.conceptId, { en: row.concept?.name ?? row.conceptId, bn: row.concept?.nameBn ?? row.conceptId }]))} />
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Daily revision */}
         <Section id="rev-daily" title={pick(lang, "Daily revision", "প্রতিদিনের রিভিশন")}>

@@ -5,7 +5,7 @@ import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyM
 import { compareScheduleUrgency, createSchedule, isDue, nextReview } from "./scheduling";
 import { buildDailyPlan, dhakaDateString, dhakaDayDiff, type DailyPlanResult, type PlannedItem } from "./planning";
 import { examPrepSource, rankExamConcepts, type ExamPrepSource } from "./exam";
-import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
+import { computeRevisionMetrics, computeRevisionTrends, type RevisionMetrics, type RevisionTrends } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
   DuplicateAttemptError,
@@ -357,6 +357,34 @@ export class RevisionService {
       });
     }
     return { source: examPrepSource(ranked), concepts };
+  }
+
+  /**
+   * Learning analytics & trends (Part 10). READ-ONLY: derives time-window
+   * trends from recorded attempts/sessions/mastery and writes nothing.
+   * Reads are explicitly capped; `truncated` says when a cap was hit so
+   * a partial window is never presented as complete.
+   */
+  async getTrends(studentId: string, windowDays: number = REVISION_CONFIG.analytics.defaultWindowDays): Promise<RevisionTrends> {
+    const cap = REVISION_CONFIG.analytics.maxAttempts;
+    const [attempts, sessions, mastery] = await Promise.all([
+      this.repo.listAttempts(studentId, { limit: cap }),
+      this.repo.listSessions(studentId, REVISION_CONFIG.analytics.maxSessions),
+      this.repo.listMastery(studentId),
+    ]);
+    const subjectByConcept = new Map<string, string | null>();
+    for (const conceptId of new Set([...attempts.map((a) => a.conceptId), ...mastery.map((m) => m.conceptId)])) {
+      subjectByConcept.set(conceptId, getConcept(conceptId)?.subjectId ?? null);
+    }
+    return computeRevisionTrends({
+      attempts,
+      sessions,
+      mastery,
+      subjectByConcept,
+      now: this.now(),
+      windowDays,
+      truncated: attempts.length >= cap || sessions.length >= REVISION_CONFIG.analytics.maxSessions,
+    });
   }
 
   async getOverview(studentId: string): Promise<RevisionOverview> {

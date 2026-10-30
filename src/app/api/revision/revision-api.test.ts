@@ -10,6 +10,7 @@ import { GET as dailyPlanGET } from "./daily-plan/route";
 import { GET as targetedQuizGET } from "./targeted-quiz/route";
 import { GET as contentGET } from "./content/route";
 import { GET as examPrepGET } from "./exam-prep/route";
+import { GET as trendsGET } from "./trends/route";
 import { InMemoryRevisionRepository, setRevisionRepositoryForTests } from "@/lib/revision/repository";
 
 const CONCEPT = "c8-math-algebraic";
@@ -107,6 +108,21 @@ describe("GET /api/revision/exam-prep (Part 09)", () => {
     const res = await examPrepGET(new Request("http://localhost/api/revision/exam-prep", { headers: H("stu-1") }));
     expect(res.status).toBe(200);
     expect(((await res.json()) as { exam: { source: string; concepts: unknown[] } }).exam).toEqual({ source: "none", concepts: [] });
+  });
+});
+
+describe("GET /api/revision/trends (Part 10)", () => {
+  it("requires ownership, validates the window, and returns honest empty trends", async () => {
+    expect((await trendsGET(new Request("http://localhost/api/revision/trends"))).status).toBe(401);
+    expect((await trendsGET(new Request("http://localhost/api/revision/trends?studentId=stu-2", { headers: H("stu-1") }))).status).toBe(403);
+    expect((await trendsGET(new Request("http://localhost/api/revision/trends?days=14", { headers: H("stu-1") }))).status).toBe(400);
+    const res = await trendsGET(new Request("http://localhost/api/revision/trends?days=7", { headers: H("stu-1") }));
+    expect(res.status).toBe(200);
+    const { trends } = (await res.json()) as { trends: { windowDays: number; daily: unknown[]; totals: { attempts: number; accuracy: number | null }; accuracyDeltaPoints: number | null } };
+    expect(trends.windowDays).toBe(7);
+    expect(trends.daily).toHaveLength(7);
+    expect(trends.totals).toMatchObject({ attempts: 0, accuracy: null });
+    expect(trends.accuracyDeltaPoints).toBeNull();
   });
 });
 

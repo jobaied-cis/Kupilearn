@@ -263,6 +263,31 @@ describe("exam preparation queue (Part 09)", () => {
   });
 });
 
+describe("learning trends (Part 10)", () => {
+  it("is read-only and isolated per student", async () => {
+    const { service, repo } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const snapshot = async () => JSON.stringify({
+      mastery: await repo.listMastery("stu-1"),
+      attempts: await repo.listAttempts("stu-1"),
+      sessions: await repo.listSessions("stu-1"),
+      schedules: await repo.listSchedules("stu-1"),
+      events: await repo.listEvents("stu-1"),
+    });
+    const before = await snapshot();
+    const trends = await service.getTrends("stu-1", 30);
+    expect(await snapshot()).toBe(before);
+    expect(trends.totals.attempts).toBe(2);
+    expect(trends.attemptsConsidered).toBe(2);
+    expect(trends.truncated).toBe(false);
+    expect(trends.subjects[0]).toMatchObject({ attempts: 2, correct: 1 });
+    const other = await service.getTrends("stu-2", 30);
+    expect(other.totals.attempts).toBe(0);
+    expect(other.daily).toHaveLength(30);
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

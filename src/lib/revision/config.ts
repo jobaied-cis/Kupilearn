@@ -45,6 +45,15 @@ export const REVISION_CONFIG = {
     questionsPerConcept: 2,
     maxQuestionsPerSession: 10,
   },
+  /** Learning analytics & trends (Part 10): read-only derivations, capped reads. */
+  analytics: {
+    maxAttempts: 1000,
+    maxSessions: 200,
+    /** Minimum attempts in each half before an accuracy delta is reported. */
+    minAttemptsPerHalf: 5,
+    allowedWindowDays: [7, 30, 90],
+    defaultWindowDays: 30,
+  },
   /** Exam preparation sessions (Part 09): mixed-status, existing questions only. */
   examPrep: {
     questionsPerConcept: 3,
