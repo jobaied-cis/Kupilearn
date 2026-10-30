@@ -6,6 +6,7 @@ import { GET as upcomingGET } from "./upcoming/route";
 import { POST as attemptsPOST } from "./attempts/route";
 import { POST as eventsPOST } from "./events/route";
 import { GET as sessionsGET, POST as sessionsPOST } from "./sessions/route";
+import { GET as dailyPlanGET } from "./daily-plan/route";
 import { InMemoryRevisionRepository, setRevisionRepositoryForTests } from "@/lib/revision/repository";
 
 const CONCEPT = "c8-math-algebraic";
@@ -65,6 +66,24 @@ describe("POST /api/revision/attempts", () => {
     expect((await post("http://localhost/api/revision/attempts", { conceptId: CONCEPT })).status).toBe(400);
     expect((await post("http://localhost/api/revision/attempts", "not-json{")).status).toBe(400);
     expect((await post("http://localhost/api/revision/attempts", { conceptId: "", isCorrect: true })).status).toBe(400);
+  });
+});
+
+describe("GET /api/revision/daily-plan (Part 05)", () => {
+  it("requires the student header, validates days, and isolates students", async () => {
+    await post("http://localhost/api/revision/attempts", { conceptId: CONCEPT, isCorrect: false });
+    expect((await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan"))).status).toBe(401);
+    expect((await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan?studentId=stu-2", { headers: H("stu-1") }))).status).toBe(403);
+    expect((await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan?days=0", { headers: H("stu-1") }))).status).toBe(400);
+    expect((await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan?days=8", { headers: H("stu-1") }))).status).toBe(400);
+
+    const mine = await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan?days=3", { headers: H("stu-1") }));
+    expect(mine.status).toBe(200);
+    const json = (await mine.json()) as { plan: { days: { items: unknown[] }[]; totalDue: number } };
+    expect(json.plan.days).toHaveLength(3);
+
+    const theirs = await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan", { headers: H("stu-2") }));
+    expect(((await theirs.json()) as { plan: { totalDue: number } }).plan.totalDue).toBe(0);
   });
 });
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang } from "../../lib/i18n";
 import { revisionFetch } from "../../lib/revision/client";
-import type { RevisionOverview } from "../../lib/revision/service";
+import type { EnrichedDailyPlan, RevisionOverview } from "../../lib/revision/service";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60";
@@ -29,13 +29,19 @@ const pct = (score: number) => `${Math.round(score * 100)}%`;
 export function RevisionDashboard() {
   const { lang } = useLang();
   const [data, setData] = useState<RevisionOverview | null>(null);
+  const [plan, setPlan] = useState<EnrichedDailyPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setError(null);
-      setData(await revisionFetch<RevisionOverview>("/api/revision/overview"));
+      const [overview, daily] = await Promise.all([
+        revisionFetch<RevisionOverview>("/api/revision/overview"),
+        revisionFetch<{ plan: EnrichedDailyPlan }>("/api/revision/daily-plan").catch(() => null),
+      ]);
+      setData(overview);
+      setPlan(daily?.plan ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "FAILED");
     }
@@ -122,15 +128,16 @@ export function RevisionDashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Daily revision */}
         <Section id="rev-daily" title={pick(lang, "Daily revision", "প্রতিদিনের রিভিশন")}>
-          {data.dueToday.length === 0 ? (
+          {(plan?.days[0]?.items.length ?? 0) === 0 ? (
             <Empty en="No revision is due today. New due items appear here after you learn a concept." bn="আজ কোনো রিভিশন বাকি নেই। নতুন টপিক শিখলে এখানে আসবে।" />
           ) : (
             <ul className="flex flex-col gap-2">
-              {data.dueToday.map((s) => (
-                <li key={s.id} className="rounded-xl bg-marigold-soft px-3 py-2 text-sm font-semibold text-ink">{lang === "bn" ? (s.concept?.nameBn ?? s.conceptId) : (s.concept?.name ?? s.conceptId)}</li>
+              {plan?.days[0]?.items.map((item) => (
+                <li key={item.conceptId} className="flex items-center justify-between gap-2 rounded-xl bg-marigold-soft px-3 py-2 text-sm font-semibold text-ink"><span>{lang === "bn" ? (item.concept?.nameBn ?? item.conceptId) : (item.concept?.name ?? item.conceptId)}</span>{item.overdueDays > 0 ? <span className="text-xs font-bold text-shapla-ink">{item.overdueDays}d {pick(lang, "overdue", "বকেয়া")}</span> : null}</li>
               ))}
             </ul>
           )}
+          {(() => { const more = (plan?.days.slice(1).reduce((n, d) => n + d.items.length, 0) ?? 0) + (plan?.carriedForward.length ?? 0); return more > 0 ? <p className="mt-2 text-xs text-ink-soft">{pick(lang, `${more} more planned for the next days - nothing is dropped.`, `আরও ${more}টি পরের দিনগুলোতে রাখা হয়েছে - কিছুই বাদ যাবে না।`)}</p> : null; })()}
           <button type="button" className={`${BTN} mt-3`} disabled={busy} onClick={() => void startDaily()}>
             <Icon name="refresh" className="size-4" strokeWidth={2} />{pick(lang, "Start a revision session", "রিভিশন সেশন শুরু করো")}
           </button>

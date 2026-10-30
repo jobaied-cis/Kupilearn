@@ -124,6 +124,38 @@ describe("adaptive scheduling through the service (Part 04)", () => {
   });
 });
 
+describe("daily plan through the service (Part 05)", () => {
+  it("derives a capped plan from real attempts and never mutates stored records", async () => {
+    const { service, repo } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const schedulesBefore = JSON.stringify(await repo.listSchedules("stu-1"));
+    const masteryBefore = JSON.stringify(await repo.listMastery("stu-1"));
+
+    const plan1 = await service.getDailyPlan("stu-1");
+    const plan2 = await service.getDailyPlan("stu-1");
+    expect(plan1).toEqual(plan2);
+    const allocated = plan1.days.flatMap((d) => d.items);
+    expect(allocated).toHaveLength(1);
+    expect(allocated[0]).toMatchObject({ conceptId: CONCEPT });
+    expect(allocated[0]?.concept).toMatchObject({ id: CONCEPT });
+    expect(plan1.days[0]?.items).toHaveLength(0); // due tomorrow, never allocated early
+
+    // Reading the plan created, updated, and deleted nothing.
+    expect(JSON.stringify(await repo.listSchedules("stu-1"))).toBe(schedulesBefore);
+    expect(JSON.stringify(await repo.listMastery("stu-1"))).toBe(masteryBefore);
+    expect(await repo.listAttempts("stu-1")).toHaveLength(1);
+    expect(await repo.listEvents("stu-1")).toHaveLength(1); // only the attempt event
+  });
+
+  it("keeps students isolated in the daily plan", async () => {
+    const { service } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    const other = await service.getDailyPlan("stu-2");
+    expect(other.totalDue).toBe(0);
+    expect(other.days.every((d) => d.items.length === 0)).toBe(true);
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

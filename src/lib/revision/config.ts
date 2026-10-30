@@ -31,6 +31,15 @@ export const REVISION_CONFIG = {
     /** Mastered intervals also grow by this factor off the ladder base. */
     masteredExtensionMultiplier: 1.5,
   },
+  /** Daily workload planning (Part 05). Read-only derivation; see planning.ts. */
+  planning: {
+    /** Max concepts allocated to one school day. */
+    dailyConceptLimit: 8,
+    /** Days returned by the daily plan, starting today. */
+    planningWindowDays: 3,
+    /** Asia/Dhaka is UTC+6 year-round (no DST): fixed offset day math. */
+    dayBoundaryOffsetMinutes: 360,
+  },
   /** Mastery algorithm (Part 03): deterministic, observable answers only. */
   mastery: {
     recentAttemptWindow: 20,

@@ -3,6 +3,7 @@ import { REVISION_CONFIG } from "./config";
 import { getConcept, type ConceptDefinition } from "./concepts";
 import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyMastery, isWeak, weaknessReasons } from "./mastery";
 import { compareScheduleUrgency, createSchedule, isDue, nextReview } from "./scheduling";
+import { buildDailyPlan, type DailyPlanResult, type PlannedItem } from "./planning";
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
@@ -208,6 +209,31 @@ export class RevisionService {
       .map((s) => ({ ...s, concept: getConcept(s.conceptId), due: isDue(s, now) }));
   }
 
+  /**
+   * Daily workload plan (Part 05). READ-ONLY: reads schedules + mastery
+   * and derives the plan; it creates, updates, and deletes nothing, so
+   * repeated reads return identical results for identical state.
+   */
+  async getDailyPlan(studentId: string, windowDays: number = REVISION_CONFIG.planning.planningWindowDays): Promise<EnrichedDailyPlan> {
+    const [schedules, mastery] = await Promise.all([this.repo.listSchedules(studentId), this.repo.listMastery(studentId)]);
+    const byConcept = new Map(mastery.map((m) => [m.conceptId, m]));
+    const plan = buildDailyPlan(
+      schedules.map((schedule) => ({
+        schedule,
+        masteryStatus: byConcept.get(schedule.conceptId)?.masteryStatus ?? null,
+        masteryScore: byConcept.get(schedule.conceptId)?.masteryScore ?? null,
+      })),
+      this.now(),
+      { windowDays },
+    );
+    const enrich = (item: PlannedItem): EnrichedPlannedItem => ({ ...item, concept: getConcept(item.conceptId) });
+    return {
+      ...plan,
+      days: plan.days.map((d) => ({ date: d.date, items: d.items.map(enrich) })),
+      carriedForward: plan.carriedForward.map(enrich),
+    };
+  }
+
   async getOverview(studentId: string): Promise<RevisionOverview> {
     const [mastery, attempts, sessions, upcoming] = await Promise.all([
       this.repo.listMastery(studentId),
@@ -232,6 +258,14 @@ export class RevisionService {
       recentAttempts: attempts.slice(0, 10),
     };
   }
+}
+
+export interface EnrichedPlannedItem extends PlannedItem {
+  concept: ConceptDefinition | null;
+}
+export interface EnrichedDailyPlan extends Omit<DailyPlanResult, "days" | "carriedForward"> {
+  days: { date: string; items: EnrichedPlannedItem[] }[];
+  carriedForward: EnrichedPlannedItem[];
 }
 
 export function createRevisionService(): RevisionService {
