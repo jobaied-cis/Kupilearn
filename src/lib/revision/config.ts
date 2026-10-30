@@ -20,6 +20,17 @@ export const REVISION_CONFIG = {
   /** Hard caps so a single response can never dump unbounded history. */
   maxUpcoming: 50,
   maxHistory: 50,
+  /** Adaptive scheduling (Part 04), applied on the Part 01 ladder. */
+  scheduling: {
+    minIntervalDays: 1,
+    maxIntervalDays: 45,
+    /** Weak concepts come back within this many days, whatever the streak. */
+    weakMaxIntervalDays: 2,
+    /** Mastered concepts wait at least this long before the next review. */
+    masteredMinIntervalDays: 14,
+    /** Mastered intervals also grow by this factor off the ladder base. */
+    masteredExtensionMultiplier: 1.5,
+  },
   /** Mastery algorithm (Part 03): deterministic, observable answers only. */
   mastery: {
     recentAttemptWindow: 20,

@@ -93,6 +93,37 @@ describe("RevisionService attempt pipeline", () => {
   });
 });
 
+describe("adaptive scheduling through the service (Part 04)", () => {
+  it("extends the interval once a concept is mastered, and resets it after a failure", async () => {
+    const { service } = makeService();
+    let last;
+    for (let i = 0; i < 4; i += 1) {
+      last = await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    }
+    expect(last?.mastery.masteryStatus).toBe("mastered");
+    expect(last?.schedule.reviewIntervalDays).toBe(21); // ladder 14 x 1.5 mastered extension
+    expect(last?.schedule.priority).toBe("low");
+
+    const failed = await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    expect(failed.schedule.reviewIntervalDays).toBe(1);
+    expect(failed.schedule.priority).toBe("high");
+    expect(failed.schedule.scheduledAt).toBe(day(1).toISOString());
+  });
+
+  it("keeps a weak concept on a short interval and surfaces it first in upcoming", async () => {
+    const { service, setNow } = makeService();
+    await service.recordAttempt("stu-weak", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const weakAttempt = await service.recordAttempt("stu-weak", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    expect(weakAttempt.mastery.masteryStatus).toBe("weak");
+    expect(weakAttempt.schedule.reviewIntervalDays).toBe(1);
+
+    await service.recordAttempt("stu-strong", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    setNow(day(2));
+    const mine = await service.getUpcoming("stu-weak", 7);
+    expect(mine[0]).toMatchObject({ conceptId: CONCEPT, due: true, priority: "high" });
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

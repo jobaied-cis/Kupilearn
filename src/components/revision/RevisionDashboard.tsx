@@ -164,7 +164,7 @@ export function RevisionDashboard() {
                   <span className="text-sm font-semibold text-ink">{lang === "bn" ? (s.concept?.nameBn ?? s.conceptId) : (s.concept?.name ?? s.conceptId)}</span>
                   <span className="text-xs font-semibold text-ink-muted">
                     <Icon name="clock" className="mr-1 inline size-3.5" strokeWidth={2} />
-                    {new Date(s.scheduledAt).toLocaleDateString(lang === "bn" ? "bn-BD" : "en-GB")} · {s.priority}
+                    {s.due ? `${pick(lang, "Due now", "এখনই বাকি")} · ` : ""}{new Date(s.scheduledAt).toLocaleDateString(lang === "bn" ? "bn-BD" : "en-GB")} · {s.priority} · {s.reviewIntervalDays}d
                   </span>
                 </li>
               ))}

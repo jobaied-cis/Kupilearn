@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { REVISION_CONFIG } from "./config";
 import { getConcept, type ConceptDefinition } from "./concepts";
-import { applyAttemptToMastery, computeMasteryScore, emptyMastery, isWeak, weaknessReasons } from "./mastery";
-import { createSchedule, isDue, nextReview } from "./scheduling";
+import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyMastery, isWeak, weaknessReasons } from "./mastery";
+import { compareScheduleUrgency, createSchedule, isDue, nextReview } from "./scheduling";
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
@@ -106,7 +106,14 @@ export class RevisionService {
     // this attempt, so scheduling and the stored record share one score.
     const history = await this.repo.listAttempts(studentId, { conceptId: input.conceptId, limit: REVISION_CONFIG.mastery.recentAttemptWindow });
     const scoreAfter = computeMasteryScore([...history, attempt], now);
+    const statusAfter = deriveMasteryStatus({
+      totalAttempts: previous.totalAttempts + 1,
+      masteryScore: scoreAfter,
+      consecutiveCorrect: consecutiveCorrectAfter,
+      consecutiveIncorrect: input.isCorrect ? 0 : previous.consecutiveIncorrect + 1,
+    });
     const review = nextReview(now, {
+      masteryStatus: statusAfter,
       isCorrect: input.isCorrect,
       consecutiveCorrectAfterAttempt: consecutiveCorrectAfter,
       masteryScore: scoreAfter,
@@ -196,6 +203,7 @@ export class RevisionService {
     const schedules = await this.repo.listSchedules(studentId);
     return schedules
       .filter((s) => s.status !== "completed" && s.status !== "cancelled" && s.scheduledAt <= horizon)
+      .sort((a, b) => compareScheduleUrgency(a, b, now))
       .slice(0, REVISION_CONFIG.maxUpcoming)
       .map((s) => ({ ...s, concept: getConcept(s.conceptId), due: isDue(s, now) }));
   }
