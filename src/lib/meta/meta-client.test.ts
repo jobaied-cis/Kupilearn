@@ -6,9 +6,9 @@ import { MockLLMClient } from "../curriculum/llm";
 const schema = z.object({ ok: z.boolean() });
 const ENV = {
   META_API_KEY: "test-key",
-  META_API_BASE_URL: "https://api.llama.com/v1",
-  META_TEACHER_MODEL: "Llama-4-Maverick-17B-128E-Instruct-FP8",
-  META_CLASSMATE_MODEL: "Llama-4-Scout-17B-16E-Instruct-FP8",
+  META_API_BASE_URL: "https://api.meta.ai/v1",
+  META_TEACHER_MODEL: "muse-wonder-1.0",
+  META_CLASSMATE_MODEL: "muse-spark-1.3",
 } as unknown as NodeJS.ProcessEnv;
 
 function fetchReturning(body: unknown, status = 200): typeof fetch {
@@ -19,8 +19,8 @@ describe("Meta config", () => {
   it("treats missing/placeholder keys as unconfigured", () => {
     expect(isMetaConfigured({} as unknown as NodeJS.ProcessEnv)).toBe(false);
     expect(isMetaConfigured({ META_API_KEY: "your_key_here" } as unknown as NodeJS.ProcessEnv)).toBe(false);
-    expect(getMetaConfig(ENV)?.teacherModel).toContain("Maverick");
-    expect(getMetaConfig(ENV)?.classmateModel).toContain("Scout");
+    expect(getMetaConfig(ENV)?.teacherModel).toContain("muse-wonder");
+    expect(getMetaConfig(ENV)?.classmateModel).toContain("muse-spark");
   });
 });
 
@@ -30,9 +30,9 @@ describe("MetaLlamaClient", () => {
     const client = new MetaLlamaClient(getMetaConfig(ENV)!, "teacher", fetchFn);
     await expect(client.generateJSON("hi", schema)).resolves.toEqual({ ok: true });
     const [url, init] = (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://api.llama.com/v1/chat/completions");
+    expect(url).toBe("https://api.meta.ai/v1/chat/completions");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer test-key");
-    expect(JSON.parse(init.body as string).model).toContain("Maverick");
+    expect(JSON.parse(init.body as string).model).toContain("muse-wonder");
   });
 
   it("retries on 500 then succeeds", async () => {

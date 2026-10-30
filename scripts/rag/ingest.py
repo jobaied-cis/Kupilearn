@@ -31,6 +31,30 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT / "data" / "rag"
 CHUNK_CHARS = 1200
 
+# NCTB Mathematics Class Six (English Version): chapter start pages from the
+# printed contents (book pages). Used to chunk any extracted book text
+# chapter-wise, so every chunk carries its chapterId/chapterTitle.
+CHAPTER_RANGES_C6_MATH = [
+    ("c6m-ch1", "Natural Numbers and Fractions", 1),
+    ("c6m-ch2", "Ratios and Percentages", 45),
+    ("c6m-ch3", "Integers", 69),
+    ("c6m-ch4", "Algebraic Expressions", 88),
+    ("c6m-ch5", "Simple Equations", 110),
+    ("c6m-ch6", "Basic Concepts of Geometry", 123),
+    ("c6m-ch7", "Practical Geometry", 143),
+    ("c6m-ch8", "Information and Data", 158),
+]
+
+def chapter_for_page(book_page: int, class_level: int) -> tuple[str, str]:
+    """Map a book page to its (chapterId, chapterTitle) for chapter-wise chunking."""
+    if class_level != 6:
+        return "", ""
+    current = ("", "")
+    for cid, title, start in CHAPTER_RANGES_C6_MATH:
+        if book_page >= start:
+            current = (cid, title)
+    return current
+
 def sha256_file(p: Path) -> str:
     h = hashlib.sha256()
     with p.open("rb") as f:
@@ -89,7 +113,9 @@ def extract_pdf(path: Path, class_level: int) -> tuple[list[dict], dict]:
     if chars >= 200 * max(1, doc.page_count // 10):
         for pageno, text in text_pages:
             if text:
+                cid, ctitle = chapter_for_page(pageno, class_level)
                 chunks.extend(chunk_text(text, {"classLevel": class_level, "subject": "Mathematics",
+                                                "chapterId": cid, "chapterTitle": ctitle,
                                                 "book_page": pageno, "source": path.name}))
         info["extraction"] = "text-layer"
         return chunks, info
@@ -104,7 +130,9 @@ def extract_pdf(path: Path, class_level: int) -> tuple[list[dict], dict]:
             img = Image.open(io.BytesIO(pix.tobytes("png")))
             text = pytesseract.image_to_string(img, lang="eng+ben")
             if text.strip():
+                cid, ctitle = chapter_for_page(i + 1, class_level)
                 chunks.extend(chunk_text(text, {"classLevel": class_level, "subject": "Mathematics",
+                                                "chapterId": cid, "chapterTitle": ctitle,
                                                 "book_page": i + 1, "source": path.name}))
         info["extraction"] = "ocr-tesseract"
     except Exception as exc:  # tesseract binary/model missing

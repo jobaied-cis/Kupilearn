@@ -60,6 +60,7 @@ export interface AgentTurnContext {
   studentInput?: string;
   studentAnswerCorrect: boolean | null;
   learnerAddressedConcept: boolean;
+  topic?: { title: string; keywords: string[]; summary: string };
 }
 
 function buildAgentPrompt(context: AgentTurnContext, retryNote?: string): BuiltPrompt {
@@ -81,6 +82,7 @@ function buildAgentPrompt(context: AgentTurnContext, retryNote?: string): BuiltP
       studentInput: context.studentInput,
       taskSchema: registry.task_schema,
       isCheckpoint: context.decision.reason === "teacher_checkpoint_due",
+      topic: context.topic,
     });
   } else if (agent.role === "assistant") {
     prompt = buildAssistantPrompt({
@@ -114,6 +116,7 @@ function buildAgentPrompt(context: AgentTurnContext, retryNote?: string): BuiltP
       studentInput: context.studentInput,
       learnerAddressedConcept: context.learnerAddressedConcept,
       questionBrief: trigger ? questionBriefFor(trigger, registry.task_schema) : undefined,
+      topic: context.topic,
     });
   }
   if (retryNote) {
@@ -207,6 +210,7 @@ export async function runClassroomTurn(
     studentInput: request.student_input,
     studentAnswerCorrect: request.student_answer_correct,
     learnerAddressedConcept: request.learner_addressed_concept,
+    topic: request.topic,
   };
 
   // Classmates pass the fidelity guardrail; after two drifted drafts the

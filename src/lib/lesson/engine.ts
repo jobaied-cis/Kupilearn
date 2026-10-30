@@ -143,10 +143,11 @@ export async function generateLesson(
   const sources = retrieve(input.query ?? `${fallback.chapter} ${fallback.topic}`, {
     classLevel: input.classLevel,
     chapterId: input.chapterId,
-    limit: 5,
+    limit: 8,
   });
   const missingSource = sources.length === 0;
-  if (!isMetaConfigured()) return { lesson: fallback, provider: "offline", degraded: true, sources, missingSource };
+  const liveProvider = isMetaConfigured() ? "meta" : null;
+  if (!liveProvider) return { lesson: fallback, provider: "offline", degraded: true, sources, missingSource };
   const prompt = [
     "[TEMPLATE:LESSON]",
     "Generate one NCTB micro-lesson as JSON only, matching this shape:",
@@ -157,11 +158,12 @@ export async function generateLesson(
     sources.length
       ? `Textbook passages (cite these; do not invent chapters, exercises or page numbers beyond them):\n${sources.map((x) => `- [book p.${x.bookPage}] ${x.text}`).join("\n")}`
       : "Textbook passages: NONE FOUND. Say clearly in the introduction that the textbook source is missing for this topic; teach only the stated objective and do not invent textbook references.",
-    "Use Bangladesh daily-life examples. Board equations use LaTeX without $ delimiters. Keep each board content short.",
+    "Write everything in English only: explanations, examples, questions and all whiteboard content. Use Bangladesh daily-life examples. Board equations use LaTeX without $ delimiters. Keep each board content short.",
+    "Visualization rule: every explanation must visualize its own textbook content on the board — at least one diagram, chart, timeline or equation per explanation, drawn from the passages above (mention the book page in a board label like 'Book p. 110'). Never produce a text-only explanation.",
   ].join("\n");
   try {
     const raw = await llm.generateJSON(prompt, StructuredLessonSchema);
-    return { lesson: { ...raw, id: fallback.id, classLevel: input.classLevel }, provider: "meta", degraded: false, sources, missingSource };
+    return { lesson: { ...raw, id: fallback.id, classLevel: input.classLevel }, provider: liveProvider, degraded: false, sources, missingSource };
   } catch {
     return { lesson: fallback, provider: "offline", degraded: true, sources, missingSource };
   }

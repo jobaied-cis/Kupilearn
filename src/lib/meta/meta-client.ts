@@ -23,9 +23,9 @@ import { LLMError, type LLMClient } from "../curriculum/llm";
 
 export type MetaRole = "teacher" | "classmate";
 
-export const DEFAULT_META_BASE_URL = "https://api.llama.com/v1";
-export const DEFAULT_TEACHER_MODEL = "Llama-4-Maverick-17B-128E-Instruct-FP8";
-export const DEFAULT_CLASSMATE_MODEL = "Llama-4-Scout-17B-16E-Instruct-FP8";
+export const DEFAULT_META_BASE_URL = "https://api.meta.ai/v1";
+export const DEFAULT_TEACHER_MODEL = "muse-wonder-1.0";
+export const DEFAULT_CLASSMATE_MODEL = "muse-spark-1.3";
 
 export interface MetaConfig {
   apiKey: string;
@@ -42,13 +42,13 @@ function isPlaceholder(v: string | undefined): boolean {
 
 export function getMetaConfig(env: NodeJS.ProcessEnv = process.env): MetaConfig | null {
   const apiKey = env.META_API_KEY ?? "";
-  const baseUrl = (env.META_API_BASE_URL || DEFAULT_META_BASE_URL).replace(/\/$/, "");
+  const baseUrl = (isPlaceholder(env.META_API_BASE_URL) ? DEFAULT_META_BASE_URL : env.META_API_BASE_URL ?? DEFAULT_META_BASE_URL).replace(/\/$/, "");
   if (isPlaceholder(apiKey)) return null;
   return {
     apiKey,
     baseUrl,
-    teacherModel: env.META_TEACHER_MODEL || DEFAULT_TEACHER_MODEL,
-    classmateModel: env.META_CLASSMATE_MODEL || DEFAULT_CLASSMATE_MODEL,
+    teacherModel: isPlaceholder(env.META_TEACHER_MODEL) ? DEFAULT_TEACHER_MODEL : env.META_TEACHER_MODEL ?? DEFAULT_TEACHER_MODEL,
+    classmateModel: isPlaceholder(env.META_CLASSMATE_MODEL) ? DEFAULT_CLASSMATE_MODEL : env.META_CLASSMATE_MODEL ?? DEFAULT_CLASSMATE_MODEL,
     timeoutMs: Number(env.META_TIMEOUT_MS ?? 30_000) || 30_000,
     maxRetries: Math.min(4, Math.max(0, Number(env.META_MAX_RETRIES ?? 2) || 0)),
   };

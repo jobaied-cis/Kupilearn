@@ -242,6 +242,12 @@ export const ClassroomTurnRequestSchema = z.object({
   /** Was the learner's last answer correct? Drives extension vs remediation. */
   student_answer_correct: z.boolean().nullable().default(null),
   student_silence_seconds: z.number().min(0).max(600).default(0),
+  /** The exact sub-topic being taught right now; classmates must ask about this. */
+  topic: z.object({
+    title: z.string().min(1).max(200),
+    keywords: z.array(z.string().min(1).max(80)).max(8).default([]),
+    summary: z.string().max(600).default(""),
+  }).optional(),
   adaptation: AdaptationSignalsSchema.default({
     learner_emotion: "calm",
     learner_comprehension: "medium",

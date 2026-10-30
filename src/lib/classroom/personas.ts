@@ -52,6 +52,8 @@ export interface ClassmatePromptArgs {
   learnerAddressedConcept: boolean;
   /** Injected by contextual question generation (§6) when a trigger matches. */
   questionBrief?: string;
+  /** The exact sub-topic being taught now; the classmate question must be about this. */
+  topic?: { title: string; keywords: string[]; summary: string };
 }
 
 export function buildClassmatePrompt(args: ClassmatePromptArgs): BuiltPrompt {
@@ -68,6 +70,8 @@ export function buildClassmatePrompt(args: ClassmatePromptArgs): BuiltPrompt {
     `If the learner explains WHY you are wrong at the conceptual level, show partial belief update: ` +
     `"${personaState.partial_update_statement}" ` +
     `Never state the correct answer. Never say "actually, the answer is..." ` +
+    `Speak only in English. Act out your personality in every line: ask questions and react the way your personality describes. ` +
+    (args.topic ? `[CURRENT TOPIC] The teacher is teaching "${args.topic.title}" right now (key words: ${args.topic.keywords.join(", ") || args.topic.title}). Ask ONE short question about THIS topic, in your personality: curious students ask why/how, struggling students ask for the step again, smart students ask a what-if extension. Your question must mention or clearly use the topic or one of its key words. ` : "") +
     `Keep responses to 1-2 sentences. You are speaking aloud, not writing an essay. ` +
     utteranceFormatInstruction();
   const lines = [
@@ -82,6 +86,8 @@ export function buildClassmatePrompt(args: ClassmatePromptArgs): BuiltPrompt {
   ];
   if (args.taskSchema) lines.push(`- Problem: ${args.taskSchema.problem_statement}`);
   if (args.questionBrief) lines.push(`- Question Brief: ${args.questionBrief}`);
+  if (args.topic) lines.push(`- Current Topic: ${args.topic.title} | Key Words: ${args.topic.keywords.join(", ")}`);
+  if (args.topic?.summary) lines.push(`- Topic Summary: ${args.topic.summary}`);
   if (args.studentInput) lines.push(`- Learner Said: """${args.studentInput}"""`);
   lines.push("[HISTORY]", formatHistoryForPrompt(args.history));
   return { instruction, text: lines.join("\n") };
@@ -102,6 +108,8 @@ export interface TeacherPromptArgs {
   redirectAfterDrift?: boolean;
   /** True when this turn is a comprehension checkpoint. */
   isCheckpoint?: boolean;
+  /** The exact sub-topic being taught now, so replies stay on it. */
+  topic?: { title: string; keywords: string[]; summary: string };
 }
 
 export function buildTeacherPrompt(args: TeacherPromptArgs): BuiltPrompt {
@@ -122,6 +130,8 @@ export function buildTeacherPrompt(args: TeacherPromptArgs): BuiltPrompt {
     `If comprehension=high AND emotion=excited: extend with a "what if" challenge. Increase pace. ` +
     `If checkpoint=failed: do not repeat the same explanation. Switch modality (e.g., from verbal to visual/whiteboard action). ` +
     redirect +
+    `[LANGUAGE] Speak and write only in English, including anything you put on the whiteboard. ` +
+    `[RETEACH POLICY] When the learner answers incorrectly, do NOT repeat the same explanation: re-explain with a different analogy and a new concrete example, then check again. When the learner answers correctly, praise them warmly by name of the idea they got right and encourage them before moving on. ` +
     `[CONSTRAINT] Use textbook terminology. Do not introduce jargon not present in the current chapter. ` +
     `Keep turns to 3 sentences or fewer because this is a spoken conversation. ` +
     utteranceFormatInstruction();
@@ -132,6 +142,7 @@ export function buildTeacherPrompt(args: TeacherPromptArgs): BuiltPrompt {
     `- Display Name: ${agent.display_name}`,
     `- Checkpoint Turn: ${args.isCheckpoint === true ? "yes" : "no"}`,
   ];
+  if (args.topic) lines.push(`- Current Topic: ${args.topic.title} | Key Words: ${args.topic.keywords.join(", ")}`);
   if (args.taskSchema) {
     lines.push(`- Problem: ${args.taskSchema.problem_statement}`);
     lines.push(`- Key Terms: ${args.taskSchema.key_terms.join(", ") || "none"}`);

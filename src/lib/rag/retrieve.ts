@@ -1,11 +1,11 @@
 import { CLASS6_MATH, type MathChapter } from "../nctb/math-book";
+import { embedText, embeddingCosine } from "./embed";
 
 /**
- * Local retrieval over textbook chunks (no third-party APIs, no embeddings
- * service). Scoring is deterministic TF cosine — the same zero-infra scorer
- * used by the curriculum engine. The Python pipeline in scripts/rag can
- * additionally produce pgvector embeddings (local models) for production;
- * this in-app retriever always works offline.
+ * Local retrieval over chapter-wise textbook chunks. Embeddings are local
+ * hashed TF vectors (embed.ts, "local:hash-tf-256") — the same model the
+ * Python pipeline in scripts/rag writes into data/rag/chunks.jsonl — so
+ * retrieval is embedding cosine over per-chapter chunks, fully offline.
  *
  * Honesty rule: chunks only contain content transcribed from the uploaded
  * textbook (contents page + chapter objectives/opening subtopics, each with
@@ -57,11 +57,6 @@ const STOP = new Set("a,an,the,and,or,of,to,in,on,for,by,with,will,be,able,stude
 export function tokenize(text: string): string[] {
   return text.toLowerCase().split(/[^a-z0-9\u0980-\u09FF]+/).filter((t) => t.length > 1 && !STOP.has(t));
 }
-function tf(tokens: string[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const t of tokens) m.set(t, (m.get(t) ?? 0) + 1);
-  return m;
-}
 export function cosine(a: Map<string, number>, b: Map<string, number>): number {
   let dot = 0;
   for (const [k, v] of a) dot += v * (b.get(k) ?? 0);
@@ -72,15 +67,45 @@ export function cosine(a: Map<string, number>, b: Map<string, number>): number {
 
 export interface RetrievedPassage extends RagChunk { score: number }
 
+/** Every chunk carries its local embedding (same model as the Python ingestion). */
+export const RAG_EMBEDDINGS: Map<string, number[]> = new Map(
+  RAG_CHUNKS.map((c) => [c.id, embedText(`${c.chapterTitle} ${c.text}`)]),
+);
+
+/**
+ * Embedding retrieval: embed the query once, then cosine-rank the chunk
+ * embeddings for the requested class/chapter. Falls back to the TF scorer
+ * only for the integer-exact evaluation helper below.
+ */
 export function retrieve(query: string, opts: { classLevel?: number; chapterId?: string; limit?: number } = {}): RetrievedPassage[] {
-  const q = tf(tokenize(query));
-  if (q.size === 0) return [];
+  const q = embedText(query);
+  if (q.every((v) => v === 0)) return [];
+  const qTokens = new Set(tokenize(query));
   return RAG_CHUNKS
     .filter((c) => (opts.classLevel === undefined || c.classLevel === opts.classLevel) && (!opts.chapterId || c.chapterId === opts.chapterId || c.chapterId === "contents"))
-    .map((c) => ({ ...c, score: cosine(q, tf(tokenize(`${c.chapterTitle} ${c.text}`))) }))
-    .filter((c) => c.score > 0.05)
+    .map((c) => ({ ...c, score: embeddingCosine(q, RAG_EMBEDDINGS.get(c.id) ?? []) }))
+    // Hashed embeddings collide occasionally; a chunk must also share a
+    // real token with the query, so unrelated queries honestly find nothing.
+    .filter((c) => c.score > 0.05 && tokenize(`${c.chapterTitle} ${c.text}`).some((t) => qTokens.has(t)))
     .sort((a, b) => b.score - a.score)
     .slice(0, opts.limit ?? 5);
+}
+
+/** All chunks of one chapter, in book order — the content the teacher teaches from. */
+export function chapterContent(chapterId: string): RagChunk[] {
+  return RAG_CHUNKS
+    .filter((c) => c.chapterId === chapterId)
+    .sort((a, b) => a.bookPage - b.bookPage || a.id.localeCompare(b.id));
+}
+
+/** Chapter-wise chunk index: chapterId -> its chunks (contents/overview excluded). */
+export function chunksByChapter(): Map<string, RagChunk[]> {
+  const map = new Map<string, RagChunk[]>();
+  for (const c of RAG_CHUNKS) {
+    if (c.chapterId === "contents") continue;
+    map.set(c.chapterId, [...(map.get(c.chapterId) ?? []), c]);
+  }
+  return map;
 }
 
 /** Retrieval evaluation: fraction of labelled queries whose expected chapter is in the top-k. */

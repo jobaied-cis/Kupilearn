@@ -6,9 +6,9 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang, type Lang } from "../../lib/i18n";
 import { EDUCATION_LABEL, getProfile } from "../../lib/profile";
-import { GAMES, HOMEWORK, LESSONS, PRACTICE_QS, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { GAMES, HOMEWORK, PRACTICE_QS, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
 import type { DashSection } from "./DashboardShell";
-import { ClassroomLive } from "../classroom/ClassroomLive";
+import { ClassroomFlow } from "../classroom/ClassroomFlow";
 
 const t = (lang: Lang, v: Bi) => (lang === "bn" ? v.bn : v.en);
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
@@ -147,28 +147,7 @@ function HomeView() {
 }
 
 function LessonView() {
-  const { lang } = useLang();
-  return (
-    <div className="mx-auto max-w-[84rem]">
-      <PageHead title={pick(lang, "Lesson", "লেসন")} sub={pick(lang, "Board lessons, chapter by chapter — written and explained out loud by your AI teacher.", "অধ্যায় ধরে বোর্ড লেসন — AI শিক্ষক লিখে ও মুখে বুঝিয়ে দেন।")} />
-      <ul className="grid gap-3 lg:grid-cols-3">
-        {LESSONS.map((l) => (
-          <li key={l.title.en} className={`${CARD} flex flex-col gap-2 p-4`}>
-            <span className="text-[0.75rem] font-bold tracking-wide text-brand-700 uppercase">{t(lang, l.subject)}</span>
-            <h2 className="font-display text-lg leading-snug font-bold text-ink">{t(lang, l.title)}</h2>
-            <p className="text-[0.85rem] text-ink-muted">{t(lang, l.meta)}</p>
-            <div className="mt-1 h-2.5 overflow-hidden rounded-full border border-ink/20 bg-paper"><div className="h-full rounded-full bg-flame" style={{ width: `${l.progress}%` }} /></div>
-            <p className="text-[0.78rem] font-semibold text-ink-soft">{l.progress}% {pick(lang, "done", "শেষ")}</p>
-            <button type="button" className={`${BTN_SM} mt-auto self-start`}><Icon name="play" className="size-4" />{l.progress ? pick(lang, "Continue", "চালিয়ে যাও") : pick(lang, "Start lesson", "লেসন শুরু করো")}</button>
-          </li>
-        ))}
-      </ul>
-      <section className={`${CARD} mt-4 p-4`}>
-        <h2 className="text-[1.05rem] text-ink">{pick(lang, "All Subjects", "সব বিষয়")}</h2>
-        <div className="mx-auto mt-3 max-w-[44rem]"><SubjectsGrid /></div>
-      </section>
-    </div>
-  );
+  return <ClassroomFlow />;
 }
 
 function RevisionView() {
@@ -342,7 +321,7 @@ function SimpleView({ section }: { section: DashSection }) {
 
 export function DashboardView({ section }: { section: DashSection }) {
   switch (section) {
-    case "classroom": return <ClassroomLive />;
+    case "classroom": return <ClassroomFlow />;
     case "lesson": return <LessonView />;
     case "revision": return <RevisionView />;
     case "practice": return <PracticeView />;

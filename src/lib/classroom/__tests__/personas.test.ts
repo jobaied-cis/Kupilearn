@@ -31,6 +31,21 @@ describe("persona prompt templates (§3)", () => {
     expect(text).toContain("1-2 sentences");
   });
 
+  it("makes classmates ask about the exact topic being taught", () => {
+    const { text } = buildClassmatePrompt({
+      agent: classmate,
+      personaState: classmate.persona_state!,
+      classLevel: 6,
+      history: [],
+      learnerAddressedConcept: false,
+      topic: { title: "Solving Simple Equations", keywords: ["balance both sides", "x + 1 = 5"], summary: "Undo operations on both sides." },
+    });
+    expect(text).toContain("[CURRENT TOPIC]");
+    expect(text).toContain("Solving Simple Equations");
+    expect(text).toContain("balance both sides");
+    expect(text).toContain("Ask ONE short question about THIS topic");
+  });
+
   it("injects question briefs into classmate prompts", () => {
     const { text } = buildClassmatePrompt({
       agent: classmate,

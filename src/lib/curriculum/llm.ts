@@ -257,6 +257,7 @@ function mockDirectorDecision(prompt: string): unknown {
 }
 
 export function createLLMClient(): LLMClient {
+  // Meta API only.
   const provider = (process.env.LLM_PROVIDER ?? "meta").toLowerCase();
   if (provider === "mock") return new MockLLMClient();
   if (provider === "meta") return new MetaRoutingClient(process.env, fetch, new MockLLMClient());

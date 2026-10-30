@@ -12,7 +12,6 @@ export type DashSection = "home" | "classroom" | "lesson" | "revision" | "practi
 
 const PRIMARY: { id: DashSection; icon: IconName; en: string; bn: string; href: string }[] = [
   { id: "home", icon: "home", en: "Home", bn: "হোম", href: "/dashboard" },
-  { id: "classroom", icon: "board", en: "AI Classroom", bn: "AI ক্লাসরুম", href: "/dashboard/classroom" },
   { id: "lesson", icon: "book", en: "Lesson", bn: "লেসন", href: "/dashboard/lesson" },
   { id: "revision", icon: "refresh", en: "Revision", bn: "রিভিশন", href: "/dashboard/revision" },
   { id: "practice", icon: "target", en: "Practice", bn: "অনুশীলন", href: "/dashboard/practice" },
@@ -32,6 +31,8 @@ const MORE: typeof PRIMARY = [
 
 function sectionFromPath(path: string): DashSection {
   const seg = path.split("/")[2];
+  // The AI Classroom now lives inside Lessons, so its old URL highlights Lesson.
+  if (seg === "classroom") return "lesson";
   const all = [...PRIMARY, ...MORE].find((i) => i.id === seg);
   return all ? all.id : "home";
 }
@@ -88,7 +89,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [ready, setReady] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const active = sectionFromPath(pathname ?? "/dashboard");
+  // Hydration: this shell is server-rendered as a shared static shell, so
+  // the server highlight and the client's real URL can disagree. Render the
+  // neutral "home" highlight on the server and first client render, then
+  // sync the real section after mount (same pattern as the profile below).
+  const [active, setActive] = useState<DashSection>("home");
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setActive(sectionFromPath(pathname ?? "/dashboard")));
+    return () => cancelAnimationFrame(id);
+  }, [pathname]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
