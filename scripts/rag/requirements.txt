@@ -1,0 +1,8 @@
+PyMuPDF>=1.24
+# Optional, for scanned PDFs (also needs the local Tesseract binary with eng+ben data):
+# pytesseract>=0.3.13
+# Pillow>=10
+# Optional local embeddings (never an API):
+# sentence-transformers>=3
+# Optional pgvector loading:
+# psycopg[binary]>=3

@@ -10,6 +10,9 @@ export interface TeacherCard {
   styleLabel: string;
   trait: string;
   color: string;
+  /** Spoken with browser speechSynthesis when the student taps Preview. */
+  previewLine: string;
+  voice: string;
 }
 export interface ClassmateCard {
   id: string;
@@ -23,14 +26,33 @@ export interface ClassmateCard {
 }
 
 export const TEACHERS: TeacherCard[] = [
-  { id: "rakib", name: "Rakib Sir", nameBn: "রাকিব স্যার", style: "socratic", styleLabel: "Asks, then explains", trait: "Patient · asks questions first", color: "bg-flame text-night" },
-  { id: "nasrin", name: "Nasrin Mam", nameBn: "নাসরিন ম্যাম", style: "analogical", styleLabel: "Daily-life examples", trait: "Warm · pitha, bazaar & cricket examples", color: "bg-coral text-white" },
-  { id: "arif", name: "Arif Sir", nameBn: "আরিফ স্যার", style: "direct", styleLabel: "Clear & direct", trait: "Fast · short, clear steps", color: "bg-lagoon text-white" },
-  { id: "farhana", name: "Farhana Mam", nameBn: "ফারহানা ম্যাম", style: "visual", styleLabel: "Draws everything", trait: "Visual · diagrams on the board", color: "bg-brand-500 text-white" },
+  {
+    id: "rakib", name: "Rakib Sir", nameBn: "রাকিব স্যার", style: "analogical",
+    styleLabel: "Real-life examples & stories",
+    trait: "Energetic, friendly, humorous · storytelling with bazaar & cricket examples",
+    color: "bg-flame text-night",
+    previewLine: "Assalamu alaikum! I am Rakib Sir. Maths is hiding in your market, your cricket game, everywhere. Let us find it together, with a story first!",
+    voice: "Energetic male voice · faster pace · cheerful, rising tone",
+  },
+  {
+    id: "nasrin", name: "Nasrin Ma'am", nameBn: "নাসরিন ম্যাম", style: "socratic",
+    styleLabel: "Detailed step-by-step",
+    trait: "Calm, patient, supportive · never rushes, one small step at a time",
+    color: "bg-coral text-white",
+    previewLine: "Hello, I am Nasrin Ma'am. Do not worry if a sum looks hard. We will take it one small step at a time, together, until it feels easy.",
+    voice: "Calm female voice · slow pace · soft, steady tone",
+  },
+  { id: "arif", name: "Arif Sir", nameBn: "আরিফ স্যার", style: "direct", styleLabel: "Clear & direct", trait: "Fast · short, clear steps", color: "bg-lagoon text-white", previewLine: "I am Arif Sir. Short steps, clear board work, quick checks.", voice: "Direct male voice · steady pace" },
+  { id: "farhana", name: "Farhana Mam", nameBn: "ফারহানা ম্যাম", style: "visual", styleLabel: "Draws everything", trait: "Visual · diagrams on the board", color: "bg-brand-500 text-white", previewLine: "I am Farhana Mam. If we can draw it, we can understand it.", voice: "Warm female voice · visual, descriptive" },
 ];
 
+/** The two teachers shown for the NCTB Mathematics classroom. */
+export const MATH_TEACHERS = TEACHERS.filter((t) => t.id === "rakib" || t.id === "nasrin");
+
 export const CLASSMATES: ClassmateCard[] = [
-  { id: "tamim", name: "Tamim", personality: "Curious", habit: "Asks 'why?' a lot", color: "bg-marigold text-ink", misconception: "Moving a term across = keeps its sign the same.", reasoning: "I move numbers without changing sign.", partialUpdate: "Oh — I have to undo it on both sides?" },
+  { id: "tamim", name: "Tamim", personality: "The Curious Student", habit: "Frequently asks why and how, challenges explanations, requests more examples", color: "bg-marigold text-ink", misconception: "Moving a term across = keeps its sign the same.", reasoning: "I move numbers without changing sign.", partialUpdate: "Oh — I have to undo it on both sides?" },
+  { id: "nabil", name: "Nabil", personality: "The Struggling Student", habit: "Sometimes misunderstands, makes realistic mistakes, asks the teacher to explain again", color: "bg-lagoon-soft text-padma-ink", misconception: "Bigger denominator means a bigger fraction.", reasoning: "I compare denominators like whole numbers.", partialUpdate: "Wait — more pieces means each piece is smaller. I think I get it now." },
+  { id: "mim", name: "Mim", personality: "The Smart Student", habit: "Understands quickly, gives alternative solutions, helps classmates connect ideas", color: "bg-kolapata-soft text-kolapata", misconception: "Once the answer looks neat, checking is a waste of time.", reasoning: "I stop at the first neat answer and never verify.", partialUpdate: "Actually, checking back caught my slip — here is another way to solve it." },
   { id: "priya", name: "Priya", personality: "Careful checker", habit: "Challenges answers politely", color: "bg-lagoon-soft text-padma-ink", misconception: "The coefficient just disappears when x is alone.", reasoning: "I drop the coefficient instead of dividing.", partialUpdate: "So I divide both sides by the coefficient?" },
   { id: "sakib", name: "Sakib", personality: "Methodical", habit: "Follows steps, skips checking", color: "bg-kolapata-soft text-kolapata", misconception: "Once the answer looks neat, checking is a waste of time.", reasoning: "I stop at the first neat answer.", partialUpdate: "Checking back actually caught my slip!" },
   { id: "nabila", name: "Nabila", personality: "Playful", habit: "Guesses fast, laughs, retries", color: "bg-coral-soft text-shapla-ink", misconception: "= means 'write the answer next'.", reasoning: "I read = as an instruction, not a balance.", partialUpdate: "So = is a balance — both sides stay equal?" },
@@ -94,3 +116,7 @@ export function buildRegistry(input: {
   if (issues.length) throw new Error(`Invalid classroom: ${issues.join("; ")}`);
   return registry;
 }
+
+
+/** The three classmates shown for the NCTB Mathematics classroom. */
+export const MATH_CLASSMATES = CLASSMATES.filter((c) => ["tamim", "nabil", "mim"].includes(c.id));

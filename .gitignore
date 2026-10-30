@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# python rag
+/.venv/
+/data/rag/chunks.jsonl
+/data/rag/status.json

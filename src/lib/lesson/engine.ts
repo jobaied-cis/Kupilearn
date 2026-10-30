@@ -3,6 +3,8 @@ import type { LLMClient } from "../curriculum/llm";
 import { createLLMClient } from "../curriculum/llm";
 import { isMetaConfigured } from "../meta/meta-client";
 import { findTopic, firstTopic } from "../nctb/catalog";
+import { retrieve, type RetrievedPassage } from "../rag/retrieve";
+import { getMathChapter } from "../nctb/math-book";
 
 /**
  * Lesson & Context Engine: Class → Subject → Chapter → Topic → Micro-lesson.
@@ -52,6 +54,10 @@ export interface LessonResult {
   lesson: StructuredLesson;
   provider: "meta" | "offline";
   degraded: boolean;
+  /** Textbook passages retrieved before generation (RAG grounding). */
+  sources: RetrievedPassage[];
+  /** True when no relevant textbook passage exists - must be shown honestly. */
+  missingSource: boolean;
 }
 
 export function offlineLesson(classLevel: number, topicId?: string): StructuredLesson {
@@ -115,11 +121,32 @@ export function offlineLesson(classLevel: number, topicId?: string): StructuredL
 }
 
 export async function generateLesson(
-  input: { classLevel: number; topicId?: string; language?: "en" | "bn"; difficulty?: number },
+  input: { classLevel: number; topicId?: string; chapterId?: string; query?: string; language?: "en" | "bn"; difficulty?: number },
   llm: LLMClient = createLLMClient(),
 ): Promise<LessonResult> {
-  const fallback = offlineLesson(input.classLevel, input.topicId);
-  if (!isMetaConfigured()) return { lesson: fallback, provider: "offline", degraded: true };
+  let fallback = offlineLesson(input.classLevel, input.topicId);
+  const mathChapter = input.chapterId ? getMathChapter(input.chapterId) : null;
+  if (mathChapter) {
+    // Ground the fallback in the real uploaded textbook chapter (objectives
+    // transcribed from its first page) instead of the generic catalog.
+    fallback = {
+      ...fallback,
+      id: mathChapter.id,
+      subject: "Mathematics",
+      chapter: mathChapter.title,
+      topic: input.query && input.query !== mathChapter.title ? input.query : mathChapter.title,
+      topicBn: mathChapter.titleBn,
+      introduction: `Today we study ${mathChapter.title} from your NCTB Mathematics book (Chapter ${mathChapter.number}, book page ${mathChapter.bookPage}). By the end you will be able to: ${mathChapter.objectives.slice(0, 3).join(" ")}`,
+      summary: `${mathChapter.title}: ${mathChapter.objectives.join(" ")} (Source: ${mathChapter.source}.)`,
+    };
+  }
+  const sources = retrieve(input.query ?? `${fallback.chapter} ${fallback.topic}`, {
+    classLevel: input.classLevel,
+    chapterId: input.chapterId,
+    limit: 5,
+  });
+  const missingSource = sources.length === 0;
+  if (!isMetaConfigured()) return { lesson: fallback, provider: "offline", degraded: true, sources, missingSource };
   const prompt = [
     "[TEMPLATE:LESSON]",
     "Generate one NCTB micro-lesson as JSON only, matching this shape:",
@@ -127,13 +154,16 @@ export async function generateLesson(
     `Class: ${input.classLevel}. Subject: ${fallback.subject}. Chapter: ${fallback.chapter}. Topic: ${fallback.topic} (${fallback.topicBn}).`,
     `Objective: ${fallback.introduction}`,
     `Language: ${input.language === "bn" ? "Bangla" : "English"}. Difficulty 1-3: ${input.difficulty ?? 2}.`,
+    sources.length
+      ? `Textbook passages (cite these; do not invent chapters, exercises or page numbers beyond them):\n${sources.map((x) => `- [book p.${x.bookPage}] ${x.text}`).join("\n")}`
+      : "Textbook passages: NONE FOUND. Say clearly in the introduction that the textbook source is missing for this topic; teach only the stated objective and do not invent textbook references.",
     "Use Bangladesh daily-life examples. Board equations use LaTeX without $ delimiters. Keep each board content short.",
   ].join("\n");
   try {
     const raw = await llm.generateJSON(prompt, StructuredLessonSchema);
-    return { lesson: { ...raw, id: fallback.id, classLevel: input.classLevel }, provider: "meta", degraded: false };
+    return { lesson: { ...raw, id: fallback.id, classLevel: input.classLevel }, provider: "meta", degraded: false, sources, missingSource };
   } catch {
-    return { lesson: fallback, provider: "offline", degraded: true };
+    return { lesson: fallback, provider: "offline", degraded: true, sources, missingSource };
   }
 }
 

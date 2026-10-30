@@ -1,0 +1,482 @@
+{
+  "edition": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025",
+  "chunks": [
+    {
+      "id": "c6m-contents",
+      "chapterId": "contents",
+      "chapterTitle": "Contents",
+      "kind": "contents",
+      "text": "Contents of NCTB Mathematics Class Six: Chapter 1 Natural Numbers and Fractions (page 1); Chapter 2 Ratios and Percentages (page 45); Chapter 3 Integers (page 69); Chapter 4 Algebraic Expressions (page 88); Chapter 5 Simple Equations (page 110); Chapter 6 Basic Concepts of Geometry (page 123); Chapter 7 Practical Geometry (page 143); Chapter 8 Information and Data (page 158); Answer (page 172).",
+      "bookPage": 4,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Contents"
+    },
+    {
+      "id": "c6m-ch1-contents",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "contents",
+      "text": "Chapter 1: Natural Numbers and Fractions (স্বাভাবিক সংখ্যা ও ভগ্নাংশ). Starts at book page 1, ends at book page 44.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-1",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Form natural numbers through arithmetic.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-2",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Read or write natural numbers in domestic and international style.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-3",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Identify prime numbers, composite numbers and co-prime numbers.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-4",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Explain divisibility; check divisibility by 2, 3, 4, 5, 9.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-5",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Determine GCD and LCM of natural numbers, fractions, and decimal fractions.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-obj-6",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "objective",
+      "text": "Learning objective (Natural Numbers and Fractions): students will be able to Solve mathematical problems by simplifying fractions and decimal fractions.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch1-1",
+      "chapterId": "c6m-ch1",
+      "chapterTitle": "Natural Numbers and Fractions",
+      "kind": "subtopic",
+      "text": "Subtopic 1.1 Enumeration in Natural Numbers and Fractions, book page 1.",
+      "bookPage": 1,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 1, book p. 1"
+    },
+    {
+      "id": "c6m-ch2-contents",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "contents",
+      "text": "Chapter 2: Ratios and Percentages (অনুপাত ও শতকরা). Starts at book page 45, ends at book page 68.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-1",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Explain what ratio is.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-2",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Solve the problems related to simple ratio.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-3",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Express percentage to fraction and fraction to percentage.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-4",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Express ratio to percentage and percentage to ratio.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-5",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Describe unitary method and the method of percentage accounting.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-obj-6",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "objective",
+      "text": "Learning objective (Ratios and Percentages): students will be able to Solve arithmetic problems about time and work, time and food, time and distance with the unitary method.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch2-1",
+      "chapterId": "c6m-ch2",
+      "chapterTitle": "Ratios and Percentages",
+      "kind": "subtopic",
+      "text": "Subtopic 2.1 Ratio in Ratios and Percentages, book page 45.",
+      "bookPage": 45,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 2, book p. 45"
+    },
+    {
+      "id": "c6m-ch3-contents",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "contents",
+      "text": "Chapter 3: Integers (পূর্ণসংখ্যা). Starts at book page 69, ends at book page 87.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch3-obj-1",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "objective",
+      "text": "Learning objective (Integers): students will be able to Explain the characteristics of integers.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch3-obj-2",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "objective",
+      "text": "Learning objective (Integers): students will be able to Identify integers.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch3-obj-3",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "objective",
+      "text": "Learning objective (Integers): students will be able to Show integers on a number line and compare small and large integers.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch3-obj-4",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "objective",
+      "text": "Learning objective (Integers): students will be able to Add and subtract signed numbers and represent those on number lines.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch3-1",
+      "chapterId": "c6m-ch3",
+      "chapterTitle": "Integers",
+      "kind": "subtopic",
+      "text": "Subtopic 3.1 Concept of Negative Integers in Integers, book page 69.",
+      "bookPage": 69,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 3, book p. 69"
+    },
+    {
+      "id": "c6m-ch4-contents",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "contents",
+      "text": "Chapter 4: Algebraic Expressions (বীজগণিতীয় রাশি). Starts at book page 88, ends at book page 109.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch4-obj-1",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "objective",
+      "text": "Learning objective (Algebraic Expressions): students will be able to Solve mathematical problems using algebraic symbol, variables, coefficient, index.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch4-obj-2",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "objective",
+      "text": "Learning objective (Algebraic Expressions): students will be able to Identify the similar and dissimilar terms of algebraic expressions.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch4-obj-3",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "objective",
+      "text": "Learning objective (Algebraic Expressions): students will be able to Describe algebraic expressions of one or more than one terms.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch4-obj-4",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "objective",
+      "text": "Learning objective (Algebraic Expressions): students will be able to Do addition and subtraction of algebraic expressions.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch4-1",
+      "chapterId": "c6m-ch4",
+      "chapterTitle": "Algebraic Expressions",
+      "kind": "subtopic",
+      "text": "Subtopic 4.1 Algebraic Symbols, Variables, Coefficients and Indices in Algebraic Expressions, book page 88.",
+      "bookPage": 88,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 4, book p. 88"
+    },
+    {
+      "id": "c6m-ch5-contents",
+      "chapterId": "c6m-ch5",
+      "chapterTitle": "Simple Equations",
+      "kind": "contents",
+      "text": "Chapter 5: Simple Equations (সরল সমীকরণ). Starts at book page 110, ends at book page 122.",
+      "bookPage": 110,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 5, book p. 110"
+    },
+    {
+      "id": "c6m-ch5-obj-1",
+      "chapterId": "c6m-ch5",
+      "chapterTitle": "Simple Equations",
+      "kind": "objective",
+      "text": "Learning objective (Simple Equations): students will be able to Explain what an equation is.",
+      "bookPage": 110,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 5, book p. 110"
+    },
+    {
+      "id": "c6m-ch5-obj-2",
+      "chapterId": "c6m-ch5",
+      "chapterTitle": "Simple Equations",
+      "kind": "objective",
+      "text": "Learning objective (Simple Equations): students will be able to Explain and solve simple equations.",
+      "bookPage": 110,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 5, book p. 110"
+    },
+    {
+      "id": "c6m-ch5-obj-3",
+      "chapterId": "c6m-ch5",
+      "chapterTitle": "Simple Equations",
+      "kind": "objective",
+      "text": "Learning objective (Simple Equations): students will be able to Form and solve equations based on real life problems.",
+      "bookPage": 110,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 5, book p. 110"
+    },
+    {
+      "id": "c6m-ch5-1",
+      "chapterId": "c6m-ch5",
+      "chapterTitle": "Simple Equations",
+      "kind": "subtopic",
+      "text": "Subtopic 5.1 Equation in Simple Equations, book page 110.",
+      "bookPage": 110,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 5, book p. 110"
+    },
+    {
+      "id": "c6m-ch6-contents",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "contents",
+      "text": "Chapter 6: Basic Concepts of Geometry (জ্যামিতির মৌলিক ধারণা). Starts at book page 123, ends at book page 142.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-1",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Explain basic concepts of geometry such as space, plane, line, point etc.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-2",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Distinguish between straight lines, lengths and rays.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-3",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Explain the relationship between different types of angles.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-4",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Describe parallel straight lines and angles formed by two parallel lines and an intersection.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-5",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Explain different types of triangles (in terms of sides and angles).",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-obj-6",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Basic Concepts of Geometry): students will be able to Identify different types of quadrilaterals.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch6-1",
+      "chapterId": "c6m-ch6",
+      "chapterTitle": "Basic Concepts of Geometry",
+      "kind": "subtopic",
+      "text": "Subtopic 6.1 Space, surface, line and point in Basic Concepts of Geometry, book page 123.",
+      "bookPage": 123,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 6, book p. 123"
+    },
+    {
+      "id": "c6m-ch7-contents",
+      "chapterId": "c6m-ch7",
+      "chapterTitle": "Practical Geometry",
+      "kind": "contents",
+      "text": "Chapter 7: Practical Geometry (ব্যবহারিক জ্যামিতি). Starts at book page 143, ends at book page 157.",
+      "bookPage": 143,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 7, book p. 143"
+    },
+    {
+      "id": "c6m-ch7-obj-1",
+      "chapterId": "c6m-ch7",
+      "chapterTitle": "Practical Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Practical Geometry): students will be able to Measure a line segment.",
+      "bookPage": 143,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 7, book p. 143"
+    },
+    {
+      "id": "c6m-ch7-obj-2",
+      "chapterId": "c6m-ch7",
+      "chapterTitle": "Practical Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Practical Geometry): students will be able to Use information to draw line segments.",
+      "bookPage": 143,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 7, book p. 143"
+    },
+    {
+      "id": "c6m-ch7-obj-3",
+      "chapterId": "c6m-ch7",
+      "chapterTitle": "Practical Geometry",
+      "kind": "objective",
+      "text": "Learning objective (Practical Geometry): students will be able to Draw figures of different measurement.",
+      "bookPage": 143,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 7, book p. 143"
+    },
+    {
+      "id": "c6m-ch7-1",
+      "chapterId": "c6m-ch7",
+      "chapterTitle": "Practical Geometry",
+      "kind": "subtopic",
+      "text": "Subtopic 7.1 Line (tools: ruler, pencil-compass) in Practical Geometry, book page 143.",
+      "bookPage": 143,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 7, book p. 143"
+    },
+    {
+      "id": "c6m-ch8-contents",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "contents",
+      "text": "Chapter 8: Information and Data (তথ্য ও উপাত্ত). Starts at book page 158, ends at book page 171.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    },
+    {
+      "id": "c6m-ch8-obj-1",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "objective",
+      "text": "Learning objective (Information and Data): students will be able to Explain information and data.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    },
+    {
+      "id": "c6m-ch8-obj-2",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "objective",
+      "text": "Learning objective (Information and Data): students will be able to Determine the mean, median and mode of unarranged data without classification.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    },
+    {
+      "id": "c6m-ch8-obj-3",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "objective",
+      "text": "Learning objective (Information and Data): students will be able to Draw a line diagram.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    },
+    {
+      "id": "c6m-ch8-obj-4",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "objective",
+      "text": "Learning objective (Information and Data): students will be able to Describe the drawn line diagram.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    },
+    {
+      "id": "c6m-ch8-1",
+      "chapterId": "c6m-ch8",
+      "chapterTitle": "Information and Data",
+      "kind": "subtopic",
+      "text": "Subtopic 8.1 Information in Information and Data, book page 158.",
+      "bookPage": 158,
+      "source": "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025, Chapter 8, book p. 158"
+    }
+  ]
+}

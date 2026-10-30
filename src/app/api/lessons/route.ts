@@ -10,6 +10,8 @@ import { generateLesson } from "@/lib/lesson/engine";
 const Body = z.object({
   classLevel: z.number().int().min(6).max(10),
   topicId: z.string().min(1).optional(),
+  chapterId: z.string().min(1).optional(),
+  query: z.string().min(1).max(300).optional(),
   language: z.enum(["en", "bn"]).default("en"),
   difficulty: z.number().int().min(1).max(3).optional(),
 });

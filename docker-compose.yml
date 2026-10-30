@@ -9,5 +9,19 @@ services:
     volumes:
       - neo4j-data:/data
 
+  # RAG store for NCTB textbook chunks (local only, no third-party AI APIs).
+  # Apply scripts/rag/schema.sql after first start.
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-kupi}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-kupi}
+      - POSTGRES_DB=${POSTGRES_DB:-kupi}
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+
 volumes:
   neo4j-data:
+  pgvector-data:
