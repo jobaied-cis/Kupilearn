@@ -1,22 +1,25 @@
-import type {
-  RevisionAttempt,
-  RevisionEvent,
-  RevisionSchedule,
-  RevisionSession,
-  StudentConceptMastery,
-} from "./types";
+import { RevisionError, type RevisionAttempt, type RevisionEvent, type RevisionSchedule, type RevisionSession, type StudentConceptMastery } from "./types";
+import { Neo4jRevisionRepository } from "./neo4j/neo4j-repository";
+import { createRevisionNeo4jExecutor } from "./neo4j/connection";
 
 /**
- * Persistence boundary (Section 4). Kupi has no student database today:
- * the curriculum graph is Neo4j (optional, in-memory default via
- * CURRICULUM_GRAPH_DRIVER) and Postgres/pgvector holds only RAG chunks
- * through Python scripts. Following that exact convention, the Revision
- * Engine depends only on this interface; the default implementation is
- * in-memory and `schema.cypher` carries the Neo4j constraints/indexes for
- * the production implementation (Part 02+). Every read is scoped by
- * studentId - there is no cross-student query in this interface.
+ * Persistence boundary. The Revision Engine depends only on this
+ * interface. Part 01 shipped the in-memory implementation; Part 02 adds
+ * Neo4jRevisionRepository (neo4j/neo4j-repository.ts) behind the privacy
+ * gate below. Every read is scoped by studentId - there is no
+ * cross-student query in this interface.
  */
+/** The four writes produced by one scored attempt. Written atomically. */
+export interface AttemptOutcome {
+  attempt: RevisionAttempt;
+  mastery: StudentConceptMastery;
+  schedule: RevisionSchedule;
+  event: RevisionEvent;
+}
+
 export interface RevisionRepository {
+  /** Attempt + mastery + schedule + event commit together or not at all. */
+  saveAttemptOutcome(outcome: AttemptOutcome): Promise<void>;
   getMastery(studentId: string, conceptId: string): Promise<StudentConceptMastery | null>;
   upsertMastery(record: StudentConceptMastery): Promise<void>;
   listMastery(studentId: string, filter?: { subjectId?: string; classLevel?: number; chapterId?: string }): Promise<StudentConceptMastery[]>;
@@ -44,6 +47,12 @@ export class InMemoryRevisionRepository implements RevisionRepository {
   private sessions = new Map<string, RevisionSession>();
   private events: RevisionEvent[] = [];
 
+  async saveAttemptOutcome(outcome: AttemptOutcome): Promise<void> {
+    await this.addAttempt(outcome.attempt);
+    await this.upsertMastery(outcome.mastery);
+    await this.upsertSchedule(outcome.schedule);
+    await this.addEvent(outcome.event);
+  }
   async getMastery(studentId: string, conceptId: string) {
     return this.mastery.get(key(studentId, conceptId)) ?? null;
   }
@@ -106,15 +115,48 @@ export class InMemoryRevisionRepository implements RevisionRepository {
 }
 
 /**
+ * Privacy gate for persistent learner records (Part 02, Section 5).
+ * Mastery, attempt history and revision events are learner records about
+ * school-age students. Persisting them requires legal review, which is
+ * not recorded anywhere in this codebase, so persistence stays OFF unless
+ * an operator explicitly sets REVISION_PERSIST_LEARNER_DATA=true after
+ * that review. Session-only (in-memory) adaptation is unaffected.
+ */
+export const LEARNER_PERSISTENCE_GATE_ENV = "REVISION_PERSIST_LEARNER_DATA";
+export function isLearnerPersistenceAuthorized(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[LEARNER_PERSISTENCE_GATE_ENV]?.trim().toLowerCase() === "true";
+}
+
+/**
  * Process-wide singleton (survives Next dev HMR via globalThis).
- * REVISION_STORE=memory is the only driver in Part 01; unknown values fail fast.
+ *
+ * REVISION_STORE selects the store:
+ * - "memory" (default): session-only in-memory store. Nothing persists.
+ * - "neo4j": persistent Neo4j store. Requires the privacy gate above AND
+ *   NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD (NEO4J_DATABASE optional).
+ *   If either condition is unmet this throws a safe 503 RevisionError -
+ *   it NEVER silently falls back to memory, so a caller can never be told
+ *   a write persisted when it only lived in RAM.
+ * Unknown values also fail with 503 rather than guessing a store.
  */
 const globalStore = globalThis as typeof globalThis & { __kupiRevisionRepository?: RevisionRepository };
-export function getRevisionRepository(): RevisionRepository {
+export function getRevisionRepository(env: NodeJS.ProcessEnv = process.env): RevisionRepository {
   if (!globalStore.__kupiRevisionRepository) {
-    const driver = (process.env.REVISION_STORE ?? "memory").toLowerCase();
-    if (driver !== "memory") throw new Error(`Unknown REVISION_STORE: ${driver} (Part 01 supports "memory"; see schema.cypher)`);
-    globalStore.__kupiRevisionRepository = new InMemoryRevisionRepository();
+    const driver = (env.REVISION_STORE ?? "memory").toLowerCase();
+    if (driver === "memory") {
+      globalStore.__kupiRevisionRepository = new InMemoryRevisionRepository();
+    } else if (driver === "neo4j") {
+      if (!isLearnerPersistenceAuthorized(env)) {
+        throw new RevisionError(
+          "REVISION_PERSISTENCE_NOT_AUTHORIZED",
+          503,
+          `Persistent revision storage is disabled pending legal review (set ${LEARNER_PERSISTENCE_GATE_ENV}=true only after that review)`,
+        );
+      }
+      globalStore.__kupiRevisionRepository = new Neo4jRevisionRepository(createRevisionNeo4jExecutor(env));
+    } else {
+      throw new RevisionError("REVISION_STORE_UNKNOWN", 503, `Unknown REVISION_STORE: ${driver}`);
+    }
   }
   return globalStore.__kupiRevisionRepository;
 }

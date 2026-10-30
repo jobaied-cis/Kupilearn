@@ -1,8 +1,12 @@
 // Revision Engine - constraints & indexes for the production Neo4j store.
-// Part 01 ships the in-memory repository (REVISION_STORE=memory, mirroring
-// CURRICULUM_GRAPH_DRIVER=memory); apply this file before enabling a Neo4j
-// RevisionRepository. All statements are idempotent, matching
-// src/lib/curriculum/graph/schema.cypher conventions.
+// Part 02 adds the Neo4j repository (REVISION_STORE=neo4j). Initialize with:
+//   npm run init:revision-db
+// which applies ONLY these idempotent statements - it never deletes data,
+// never seeds learner records, and is safe to re-run. Initialization is a
+// manual operator step, separate from student API requests (the API never
+// runs schema statements). Persistent learner records additionally require
+// REVISION_PERSIST_LEARNER_DATA=true after legal review - see
+// docs/revision-engine-part02.md.
 //
 // Node labels mirror the five logical entities:
 //   (:StudentConceptMastery {student_id, concept_id, ...})
@@ -39,3 +43,13 @@ FOR (a:RevisionAttempt) ON (a.student_id, a.concept_id, a.attempted_at);
 
 CREATE INDEX revision_event_student_time IF NOT EXISTS
 FOR (e:RevisionEvent) ON (e.student_id, e.timestamp);
+
+// listMastery filters by subject / chapter within one student.
+CREATE INDEX revision_mastery_student_subject IF NOT EXISTS
+FOR (m:StudentConceptMastery) ON (m.student_id, m.subject_id);
+
+CREATE INDEX revision_mastery_student_chapter IF NOT EXISTS
+FOR (m:StudentConceptMastery) ON (m.student_id, m.chapter_id);
+
+CREATE INDEX revision_session_student_time IF NOT EXISTS
+FOR (s:RevisionSession) ON (s.student_id, s.started_at);

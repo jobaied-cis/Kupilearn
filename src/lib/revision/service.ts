@@ -96,8 +96,6 @@ export class RevisionService {
       source: input.source,
       attemptedAt: now.toISOString(),
     };
-    await this.repo.addAttempt(attempt);
-
     const previous = (await this.repo.getMastery(studentId, input.conceptId)) ?? emptyMastery(studentId, concept, now);
     const consecutiveCorrectAfter = input.isCorrect ? previous.consecutiveCorrect + 1 : 0;
     // Priority/interval must reflect the state AFTER this attempt, so the
@@ -111,18 +109,26 @@ export class RevisionService {
       consecutiveIncorrect: input.isCorrect ? 0 : previous.consecutiveIncorrect + 1,
     });
     const mastery = applyAttemptToMastery(previous, { isCorrect: input.isCorrect, nextReviewAt: review.scheduledAt }, now);
-    await this.repo.upsertMastery(mastery);
-
     const schedule = createSchedule(studentId, input.conceptId, review, now, (await this.repo.getSchedule(studentId, input.conceptId)) ?? undefined);
-    await this.repo.upsertSchedule(schedule);
+
+    // Attempt + mastery + schedule + event are written atomically by the
+    // repository (one Neo4j write transaction when persisted). If the
+    // store fails, this throws and no partial outcome is reported.
+    await this.repo.saveAttemptOutcome({
+      attempt,
+      mastery,
+      schedule,
+      event: {
+        id: `evt_${randomUUID()}`,
+        studentId,
+        eventType: "revision_attempt",
+        conceptId: input.conceptId,
+        metadata: { attemptId: attempt.id, isCorrect: input.isCorrect, source: input.source, questionId: attempt.questionId },
+        timestamp: now.toISOString(),
+      },
+    });
 
     if (input.sessionId) await this.noteAttemptInSession(studentId, input.sessionId, input.conceptId, input.isCorrect);
-    await this.appendEvent(studentId, "revision_attempt", input.conceptId, {
-      attemptId: attempt.id,
-      isCorrect: input.isCorrect,
-      source: input.source,
-      questionId: attempt.questionId,
-    });
     return { attempt, mastery: enrichMastery(mastery), schedule };
   }
 
