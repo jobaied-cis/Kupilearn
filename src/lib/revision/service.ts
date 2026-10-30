@@ -4,6 +4,7 @@ import { getConcept, type ConceptDefinition } from "./concepts";
 import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyMastery, isWeak, weaknessReasons } from "./mastery";
 import { compareScheduleUrgency, createSchedule, isDue, nextReview } from "./scheduling";
 import { buildDailyPlan, dhakaDateString, dhakaDayDiff, type DailyPlanResult, type PlannedItem } from "./planning";
+import { examPrepSource, rankExamConcepts, type ExamPrepSource } from "./exam";
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
@@ -294,15 +295,7 @@ export class RevisionService {
         this.repo.getSchedule(studentId, ref.conceptId),
         this.repo.listAttempts(studentId, { conceptId: ref.conceptId, limit: REVISION_CONFIG.mastery.recentAttemptWindow }),
       ]);
-      const recentlyCorrectIndexes = [
-        ...new Set(
-          attempts
-            .filter((a) => a.isCorrect && a.questionId)
-            .map((a) => /(?:^|:)(\d+)$/.exec(a.questionId ?? "")?.[1])
-            .filter((v): v is string => v !== undefined)
-            .map(Number),
-        ),
-      ].sort((a, b) => a - b);
+      const recentlyCorrectIndexes = parseRecentlyCorrectIndexes(attempts);
       concepts.push({
         conceptId: ref.conceptId,
         topicId: concept.topicId,
@@ -316,6 +309,54 @@ export class RevisionService {
       });
     }
     return { source, concepts };
+  }
+
+  /**
+   * Exam preparation queue data (Part 09). Concepts the student has
+   * actually attempted, ranked weak -> due -> practicing -> mastered
+   * (exam.ts). Honestly `none` when nothing has been attempted: no
+   * queue, dates, weights, or readiness score is ever fabricated.
+   * Read-only, like the targeted quiz.
+   */
+  async getExamPrep(studentId: string): Promise<ExamPrep> {
+    const [mastery, schedules] = await Promise.all([this.repo.listMastery(studentId), this.repo.listSchedules(studentId)]);
+    const attempted = mastery.filter((m) => m.totalAttempts > 0);
+    const scheduleByConcept = new Map(schedules.map((s) => [s.conceptId, s]));
+    const today = dhakaDateString(this.now());
+    const inputs = attempted.flatMap((m) => {
+      const concept = getConcept(m.conceptId);
+      if (!concept) return [];
+      const schedule = scheduleByConcept.get(m.conceptId);
+      return [{
+        conceptId: m.conceptId,
+        topicId: concept.topicId,
+        classLevel: concept.classLevel,
+        masteryStatus: m.masteryStatus,
+        masteryScore: m.masteryScore,
+        overdueDays: schedule ? dhakaDayDiff(dhakaDateString(new Date(schedule.scheduledAt)), today) : 0,
+        questionCount: 0,
+        recentlyCorrectIndexes: [] as number[],
+      }];
+    });
+    const ranked = rankExamConcepts(inputs);
+    const concepts: TargetedQuizConcept[] = [];
+    for (const input of ranked) {
+      const concept = getConcept(input.conceptId);
+      if (!concept) continue;
+      const attempts = await this.repo.listAttempts(studentId, { conceptId: input.conceptId, limit: REVISION_CONFIG.mastery.recentAttemptWindow });
+      concepts.push({
+        conceptId: input.conceptId,
+        topicId: concept.topicId,
+        classLevel: concept.classLevel,
+        name: concept.name,
+        nameBn: concept.nameBn,
+        masteryStatus: input.masteryStatus,
+        masteryScore: input.masteryScore,
+        overdueDays: input.overdueDays,
+        recentlyCorrectIndexes: parseRecentlyCorrectIndexes(attempts),
+      });
+    }
+    return { source: examPrepSource(ranked), concepts };
   }
 
   async getOverview(studentId: string): Promise<RevisionOverview> {
@@ -366,6 +407,23 @@ export interface TargetedQuizConcept {
 export interface TargetedQuiz {
   source: "weak" | "due" | "none";
   concepts: TargetedQuizConcept[];
+}
+export interface ExamPrep {
+  source: ExamPrepSource;
+  concepts: TargetedQuizConcept[];
+}
+
+/** Question indexes recently answered correctly, parsed from our own attempt question ids. */
+export function parseRecentlyCorrectIndexes(attempts: RevisionAttempt[]): number[] {
+  return [
+    ...new Set(
+      attempts
+        .filter((a) => a.isCorrect && a.questionId)
+        .map((a) => /(?:^|:)(\d+)$/.exec(a.questionId ?? "")?.[1])
+        .filter((v): v is string => v !== undefined)
+        .map(Number),
+    ),
+  ].sort((a, b) => a - b);
 }
 
 export function createRevisionService(): RevisionService {

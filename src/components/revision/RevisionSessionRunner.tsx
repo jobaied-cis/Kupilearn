@@ -14,6 +14,7 @@ import {
 } from "../../lib/revision/session-runner";
 import type { EnrichedPlannedItem, TargetedQuizConcept } from "../../lib/revision/service";
 import { buildQuizQueue } from "../../lib/revision/quiz";
+import { buildExamQueue } from "../../lib/revision/exam";
 import type { RevisionSession } from "../../lib/revision/types";
 import type { LessonQuestion } from "../../lib/lesson/engine";
 
@@ -34,10 +35,16 @@ interface Props {
   reviewedConceptIds?: string[];
   /** Part 07: when provided, run a targeted quiz over these concepts instead of the daily plan. */
   quizConcepts?: TargetedQuizConcept[] | null;
+  /** Part 09: when provided, run an exam preparation session over these concepts. */
+  examConcepts?: TargetedQuizConcept[] | null;
   onDone: () => void;
 }
 
-export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedConceptIds = [], quizConcepts = null, onDone }: Props) {
+export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedConceptIds = [], quizConcepts = null, examConcepts = null, onDone }: Props) {
+  const modeConcepts = examConcepts ?? quizConcepts;
+  const isExam = examConcepts !== null;
+  const perConceptCap = isExam ? REVISION_CONFIG.examPrep.questionsPerConcept : REVISION_CONFIG.session.questionsPerConcept;
+  const maxQuestions = isExam ? REVISION_CONFIG.examPrep.maxQuestionsPerSession : REVISION_CONFIG.session.maxQuestionsPerSession;
   const { lang } = useLang();
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [skipped, setSkipped] = useState<string[]>([]);
@@ -61,23 +68,24 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
           if (!sessionIdRef.current) {
             const created = await revisionFetch<{ session: RevisionSession }>("/api/revision/sessions", {
               method: "POST",
-              body: JSON.stringify({ sessionType: quizConcepts ? "weak_concepts" : "daily" }),
+              body: JSON.stringify({ sessionType: isExam ? "exam_prep" : quizConcepts ? "weak_concepts" : "daily" }),
             });
             sessionIdRef.current = created.session.sessionId;
             saveActiveSessionId(created.session.sessionId);
           }
           const planned = selectSessionConcepts(
-            quizConcepts ?? items
+            modeConcepts ?? items
               .filter((i) => i.concept)
               .map((i) => ({ conceptId: i.conceptId, topicId: i.concept?.topicId ?? i.conceptId, classLevel: i.concept?.classLevel ?? 8 })),
+            Math.ceil(maxQuestions / perConceptCap),
           );
           const concepts = resumeSessionId ? remainingConcepts(planned, reviewedConceptIds) : planned;
           const built: QueueItem[] = [];
           const skippedNames: string[] = [];
           for (const concept of concepts) {
-            if (built.length >= REVISION_CONFIG.session.maxQuestionsPerSession) break;
+            if (built.length >= maxQuestions) break;
             const item = items.find((i) => i.conceptId === concept.conceptId);
-            const quizConcept = quizConcepts?.find((c) => c.conceptId === concept.conceptId);
+            const quizConcept = modeConcepts?.find((c) => c.conceptId === concept.conceptId);
             const name = quizConcept?.name ?? item?.concept?.name ?? concept.conceptId;
             const nameBn = quizConcept?.nameBn ?? item?.concept?.nameBn ?? name;
             try {
@@ -87,13 +95,13 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
                 body: JSON.stringify({ topicId: concept.topicId, classLevel: concept.classLevel }),
               });
               const data = (await res.json()) as { lesson?: { questions?: LessonQuestion[] } };
-              const questions = (data.lesson?.questions ?? []).slice(0, REVISION_CONFIG.session.questionsPerConcept);
+              const questions = (data.lesson?.questions ?? []).slice(0, perConceptCap);
               if (questions.length === 0) {
                 skippedNames.push(name);
                 continue;
               }
               questions.forEach((question, questionIndex) => {
-                if (built.length < REVISION_CONFIG.session.maxQuestionsPerSession) {
+                if (built.length < maxQuestions) {
                   built.push({ conceptId: concept.conceptId, name, nameBn, questionIndex, question });
                 }
               });
@@ -103,19 +111,18 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
           }
           if (cancelled) return;
           setSkipped(skippedNames);
-          if (quizConcepts) {
-            // Targeted quiz (Part 07): weak-first, interleaved, proven
-            // questions de-prioritized - selection over the same fetched
-            // lesson questions, nothing new generated.
+          if (modeConcepts) {
+            // Targeted quiz (Part 07) / exam prep (Part 09): weak-first,
+            // interleaved, proven questions de-prioritized - selection
+            // over the same fetched lesson questions, nothing generated.
             const byConcept = new Map<string, QueueItem[]>();
             for (const q of built) {
               const list = byConcept.get(q.conceptId) ?? [];
               list.push(q);
               byConcept.set(q.conceptId, list);
             }
-            const ordered = buildQuizQueue(
-              concepts.map((c) => {
-                const qc = quizConcepts.find((x) => x.conceptId === c.conceptId);
+            const queueInput = concepts.map((c) => {
+                const qc = modeConcepts.find((x) => x.conceptId === c.conceptId);
                 return {
                   conceptId: c.conceptId,
                   topicId: c.topicId,
@@ -126,8 +133,8 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
                   questionCount: byConcept.get(c.conceptId)?.length ?? 0,
                   recentlyCorrectIndexes: qc?.recentlyCorrectIndexes ?? [],
                 };
-              }),
-            );
+              });
+            const ordered = isExam ? buildExamQueue(queueInput) : buildQuizQueue(queueInput);
             setQueue(ordered.flatMap((o) => {
               const q = byConcept.get(o.conceptId)?.[o.questionIndex];
               return q ? [q] : [];

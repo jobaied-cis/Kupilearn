@@ -45,6 +45,11 @@ export const REVISION_CONFIG = {
     questionsPerConcept: 2,
     maxQuestionsPerSession: 10,
   },
+  /** Exam preparation sessions (Part 09): mixed-status, existing questions only. */
+  examPrep: {
+    questionsPerConcept: 3,
+    maxQuestionsPerSession: 15,
+  },
   /** AI revision content (Part 08): on-demand only, cached, capped. */
   content: {
     flashcardMin: 3,

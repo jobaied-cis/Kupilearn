@@ -225,6 +225,44 @@ describe("targeted quiz queue (Part 07)", () => {
   });
 });
 
+describe("exam preparation queue (Part 09)", () => {
+  it("honestly returns none for a student who has attempted nothing", async () => {
+    const { service } = makeService();
+    expect(await service.getExamPrep("stu-1")).toEqual({ source: "none", concepts: [] });
+  });
+
+  it("returns attempted concepts weak-first with recently-correct indexes, isolated per student", async () => {
+    const { service } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, questionId: "c8-math-algebraic:revision:0", isCorrect: true, source: "practice" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const exam = await service.getExamPrep("stu-1");
+    expect(exam.source).toBe("weak");
+    expect(exam.concepts[0]).toMatchObject({ conceptId: CONCEPT, masteryStatus: "weak", recentlyCorrectIndexes: [0] });
+    expect(await service.getExamPrep("stu-2")).toEqual({ source: "none", concepts: [] });
+  });
+
+  it("scores an exam_prep session answer exactly once under simultaneous duplicates", async () => {
+    const { service, repo } = makeService();
+    const session = await service.startSession("stu-1", "exam_prep");
+    const input = { conceptId: CONCEPT, questionId: "c8-math-algebraic:revision:0", isCorrect: true, sessionId: session.sessionId, source: "revision" as const };
+    const results = await Promise.all([service.recordAttempt("stu-1", input), service.recordAttempt("stu-1", input)]);
+    expect(results.filter((r) => r.duplicate)).toHaveLength(1);
+    expect(await repo.listAttempts("stu-1")).toHaveLength(1);
+    expect((await service.getSession("stu-1", session.sessionId)).totalQuestions).toBe(1);
+    expect((await repo.listMastery("stu-1"))[0]?.totalAttempts).toBe(1);
+  });
+
+  it("labels a queue with only a correct attempt as practicing, never a readiness score", async () => {
+    const { service } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    const exam = await service.getExamPrep("stu-1");
+    expect(exam.source).toBe("practicing");
+    expect(exam.concepts.map((c) => c.conceptId)).toEqual([CONCEPT]);
+    expect(exam).not.toHaveProperty("readiness");
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

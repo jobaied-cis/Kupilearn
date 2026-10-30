@@ -8,7 +8,7 @@ import { revisionFetch } from "../../lib/revision/client";
 import { RevisionSessionRunner } from "./RevisionSessionRunner";
 import { RevisionContentPanel } from "./RevisionContentPanel";
 import { loadActiveSessionId } from "../../lib/revision/session-runner";
-import type { EnrichedDailyPlan, RevisionOverview, TargetedQuiz } from "../../lib/revision/service";
+import type { EnrichedDailyPlan, ExamPrep, RevisionOverview, TargetedQuiz } from "../../lib/revision/service";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60";
@@ -36,6 +36,7 @@ export function RevisionDashboard() {
   const [showRunner, setShowRunner] = useState(false);
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [quiz, setQuiz] = useState<TargetedQuiz | null>(null);
+  const [exam, setExam] = useState<ExamPrep | null>(null);
   const [contentConceptId, setContentConceptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +77,19 @@ export function RevisionDashboard() {
     try {
       const res = await revisionFetch<{ quiz: TargetedQuiz }>("/api/revision/targeted-quiz");
       setQuiz(res.quiz);
+      setExam(null);
+      setResumeId(null);
+      setShowRunner(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "FAILED");
+    }
+  }
+
+  async function startExam() {
+    try {
+      const res = await revisionFetch<{ exam: ExamPrep }>("/api/revision/exam-prep");
+      setExam(res.exam);
+      setQuiz(null);
       setResumeId(null);
       setShowRunner(true);
     } catch (e) {
@@ -107,7 +121,7 @@ export function RevisionDashboard() {
     return (
       <div className="mx-auto flex max-w-[84rem] flex-col gap-4">
         <h1 className="text-[clamp(1.35rem,3vw,1.8rem)] leading-tight text-ink">{pick(lang, "Revision session", "রিভিশন সেশন")}</h1>
-        <RevisionSessionRunner items={plan?.days[0]?.items ?? []} resumeSessionId={resumeId} reviewedConceptIds={inProgress?.conceptsReviewed ?? []} quizConcepts={quiz?.concepts ?? null} onDone={() => { setShowRunner(false); setResumeId(null); setQuiz(null); void load(); }} />
+        <RevisionSessionRunner items={plan?.days[0]?.items ?? []} resumeSessionId={resumeId} reviewedConceptIds={inProgress?.conceptsReviewed ?? []} quizConcepts={quiz?.concepts ?? null} examConcepts={exam?.concepts ?? null} onDone={() => { setShowRunner(false); setResumeId(null); setQuiz(null); setExam(null); void load(); }} />
       </div>
     );
   }
@@ -201,6 +215,20 @@ export function RevisionDashboard() {
         </Section>
 
         {contentConceptId ? <RevisionContentPanel conceptId={contentConceptId} onClose={() => setContentConceptId(null)} /> : null}
+
+        {/* Exam preparation (Part 09) */}
+        <Section id="rev-exam" title={pick(lang, "Exam preparation", "পরীক্ষার প্রস্তুতি")}>
+          {!hasData ? (
+            <Empty en="Nothing to prepare yet. Learn a concept first - exam prep mixes your weak and due topics together here." bn="এখনো প্রস্তুতির কিছু নেই। আগে একটি টপিক শেখো - পরীক্ষার প্রস্তুতিতে তোমার দুর্বল আর বাকি টপিক মিলিয়ে আসবে।" />
+          ) : (
+            <>
+              <p className="text-sm text-ink-soft">{pick(lang, "A mixed session across what you have learned: weakest topics first, then due topics, then the rest.", "শেখা টপিক মিলিয়ে একটি সেশন: আগে সবচেয়ে দুর্বল, তারপর বাকি, তারপর বাকিগুলো।")}</p>
+              <button type="button" className={`${BTN} mt-3`} onClick={() => void startExam()}>
+                <Icon name="target" className="size-4" strokeWidth={2} />{pick(lang, "Start exam prep", "পরীক্ষার প্রস্তুতি শুরু করো")}
+              </button>
+            </>
+          )}
+        </Section>
 
         {/* Upcoming revisions */}
         <Section id="rev-upcoming" title={pick(lang, "Upcoming revisions", "সামনের রিভিশন")}>

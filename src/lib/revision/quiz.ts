@@ -50,12 +50,12 @@ export function compareQuizConcepts(a: QuizConceptInput, b: QuizConceptInput): n
  * order), then - only if nothing else exists - the recently correct
  * ones, oldest-proven first is unknowable here, so registry order.
  */
-export function orderQuestionIndexes(concept: QuizConceptInput): number[] {
+export function orderQuestionIndexes(concept: QuizConceptInput, perConceptCap: number = REVISION_CONFIG.session.questionsPerConcept): number[] {
   const all = Array.from({ length: Math.max(0, concept.questionCount) }, (_, i) => i);
   const recent = new Set(concept.recentlyCorrectIndexes);
   const fresh = all.filter((i) => !recent.has(i));
   const proven = all.filter((i) => recent.has(i));
-  return [...fresh, ...proven].slice(0, REVISION_CONFIG.session.questionsPerConcept);
+  return [...fresh, ...proven].slice(0, perConceptCap);
 }
 
 /**
@@ -63,9 +63,14 @@ export function orderQuestionIndexes(concept: QuizConceptInput): number[] {
  * (A1 B1 C1 A2 B2 ...), capped per concept and in total. Concepts with
  * no questions contribute nothing. Empty input -> empty queue.
  */
-export function buildQuizQueue(concepts: QuizConceptInput[]): QuizQueueItem[] {
+export function buildQuizQueue(
+  concepts: QuizConceptInput[],
+  caps: { perConcept?: number; total?: number } = {},
+): QuizQueueItem[] {
+  const perConceptCap = caps.perConcept ?? REVISION_CONFIG.session.questionsPerConcept;
+  const totalCap = caps.total ?? REVISION_CONFIG.session.maxQuestionsPerSession;
   const ranked = [...concepts].sort(compareQuizConcepts);
-  const perConcept = ranked.map((c) => orderQuestionIndexes(c));
+  const perConcept = ranked.map((c) => orderQuestionIndexes(c, perConceptCap));
   const queue: QuizQueueItem[] = [];
   const maxRounds = Math.max(0, ...perConcept.map((q) => q.length));
   for (let round = 0; round < maxRounds; round += 1) {
@@ -73,7 +78,7 @@ export function buildQuizQueue(concepts: QuizConceptInput[]): QuizQueueItem[] {
       const questionIndex = perConcept[c]?.[round];
       if (questionIndex === undefined) continue;
       queue.push({ conceptId: ranked[c]!.conceptId, questionIndex });
-      if (queue.length >= REVISION_CONFIG.session.maxQuestionsPerSession) return queue;
+      if (queue.length >= totalCap) return queue;
     }
   }
   return queue;
