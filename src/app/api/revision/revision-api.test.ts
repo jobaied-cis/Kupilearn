@@ -8,6 +8,7 @@ import { POST as eventsPOST } from "./events/route";
 import { GET as sessionsGET, POST as sessionsPOST } from "./sessions/route";
 import { GET as dailyPlanGET } from "./daily-plan/route";
 import { GET as targetedQuizGET } from "./targeted-quiz/route";
+import { GET as contentGET } from "./content/route";
 import { InMemoryRevisionRepository, setRevisionRepositoryForTests } from "@/lib/revision/repository";
 
 const CONCEPT = "c8-math-algebraic";
@@ -95,6 +96,23 @@ describe("GET /api/revision/targeted-quiz (Part 07)", () => {
     const res = await targetedQuizGET(new Request("http://localhost/api/revision/targeted-quiz", { headers: H("stu-1") }));
     expect(res.status).toBe(200);
     expect(((await res.json()) as { quiz: { source: string; concepts: unknown[] } }).quiz).toEqual({ source: "none", concepts: [] });
+  });
+});
+
+describe("GET /api/revision/content (Part 08)", () => {
+  it("requires ownership, validates lang and concept, and serves content", async () => {
+    expect((await contentGET(new Request("http://localhost/api/revision/content?conceptId=c8-math-algebraic"))).status).toBe(401);
+    expect((await contentGET(new Request("http://localhost/api/revision/content?conceptId=c8-math-algebraic&studentId=stu-2", { headers: H("stu-1") }))).status).toBe(403);
+    expect((await contentGET(new Request("http://localhost/api/revision/content", { headers: H("stu-1") }))).status).toBe(400);
+    expect((await contentGET(new Request("http://localhost/api/revision/content?conceptId=c8-math-algebraic&lang=fr", { headers: H("stu-1") }))).status).toBe(400);
+    expect((await contentGET(new Request("http://localhost/api/revision/content?conceptId=c6m-ch4", { headers: H("stu-1") }))).status).toBe(404);
+    const ok = await contentGET(new Request("http://localhost/api/revision/content?conceptId=c8-math-algebraic&lang=bn", { headers: H("stu-1") }));
+    expect(ok.status).toBe(200);
+    const { content } = (await ok.json()) as { content: { conceptId: string; language: string; source: string; flashcards: unknown[] } };
+    expect(content.conceptId).toBe("c8-math-algebraic");
+    expect(content.language).toBe("bn");
+    expect(["meta", "offline"]).toContain(content.source);
+    expect(content.flashcards.length).toBeGreaterThanOrEqual(3);
   });
 });
 

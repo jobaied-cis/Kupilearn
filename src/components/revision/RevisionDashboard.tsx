@@ -6,6 +6,7 @@ import { Icon } from "../Icon";
 import { pick, useLang } from "../../lib/i18n";
 import { revisionFetch } from "../../lib/revision/client";
 import { RevisionSessionRunner } from "./RevisionSessionRunner";
+import { RevisionContentPanel } from "./RevisionContentPanel";
 import { loadActiveSessionId } from "../../lib/revision/session-runner";
 import type { EnrichedDailyPlan, RevisionOverview, TargetedQuiz } from "../../lib/revision/service";
 
@@ -35,6 +36,7 @@ export function RevisionDashboard() {
   const [showRunner, setShowRunner] = useState(false);
   const [resumeId, setResumeId] = useState<string | null>(null);
   const [quiz, setQuiz] = useState<TargetedQuiz | null>(null);
+  const [contentConceptId, setContentConceptId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -189,6 +191,7 @@ export function RevisionDashboard() {
                 <li key={row.conceptId} className="flex items-center justify-between gap-2 rounded-xl bg-coral-soft px-3 py-2">
                   <span className="text-sm font-semibold text-ink">{lang === "bn" ? (row.concept?.nameBn ?? row.conceptId) : (row.concept?.name ?? row.conceptId)}</span>
                   <span className="text-sm font-bold text-shapla-ink">{pct(row.masteryScore)}</span>
+                  <button type="button" className="rounded-full border-2 border-ink bg-white px-2.5 py-0.5 text-[0.7rem] font-bold text-ink" aria-expanded={contentConceptId === row.conceptId} onClick={() => setContentConceptId(contentConceptId === row.conceptId ? null : row.conceptId)}>{pick(lang, "Revise", "ঝালিয়ে নাও")}</button>
                   {row.reasons?.length ? <span className="w-full text-xs text-ink-soft">{row.reasons.join(" ")}</span> : null}
 
                 </li>
@@ -196,6 +199,8 @@ export function RevisionDashboard() {
             </ul>
           )}
         </Section>
+
+        {contentConceptId ? <RevisionContentPanel conceptId={contentConceptId} onClose={() => setContentConceptId(null)} /> : null}
 
         {/* Upcoming revisions */}
         <Section id="rev-upcoming" title={pick(lang, "Upcoming revisions", "সামনের রিভিশন")}>

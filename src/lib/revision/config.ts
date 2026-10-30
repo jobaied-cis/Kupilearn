@@ -45,6 +45,15 @@ export const REVISION_CONFIG = {
     questionsPerConcept: 2,
     maxQuestionsPerSession: 10,
   },
+  /** AI revision content (Part 08): on-demand only, cached, capped. */
+  content: {
+    flashcardMin: 3,
+    flashcardMax: 5,
+    maxBodyParagraphs: 4,
+    maxParagraphChars: 400,
+    maxCardFrontChars: 120,
+    maxCardBackChars: 200,
+  },
   /** Mastery algorithm (Part 03): deterministic, observable answers only. */
   mastery: {
     recentAttemptWindow: 20,
