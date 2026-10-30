@@ -1,0 +1,109 @@
+import { describe, expect, it } from "vitest";
+import { InMemoryRevisionRepository } from "../repository";
+import { RevisionService } from "../service";
+import { processLearningEvent } from "../events";
+import { RevisionError } from "../types";
+
+const CONCEPT = "c8-math-algebraic";
+const T0 = new Date("2026-01-01T09:00:00.000Z");
+const day = (n: number) => new Date(T0.getTime() + n * 86_400_000);
+
+function makeService() {
+  let current = T0;
+  const repo = new InMemoryRevisionRepository();
+  const service = new RevisionService(repo, () => current);
+  return { repo, service, setNow: (d: Date) => { current = d; } };
+}
+
+describe("RevisionService attempt pipeline", () => {
+  it("records a correct checkpoint attempt accurately", async () => {
+    const { service } = makeService();
+    const { attempt, mastery, schedule } = await service.recordAttempt("stu-1", {
+      conceptId: CONCEPT, questionId: "q1", studentAnswer: "Read carefully", isCorrect: true, source: "understanding_check",
+    });
+    expect(attempt).toMatchObject({ studentId: "stu-1", conceptId: CONCEPT, isCorrect: true, studentAnswer: "Read carefully", source: "understanding_check" });
+    expect(mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 1, incorrectAttempts: 0, consecutiveCorrect: 1, masteryScore: 1, masteryStatus: "mastered" });
+    expect(mastery.lastReviewedAt).toBe(T0.toISOString());
+    expect(schedule.scheduledAt).toBe(day(1).toISOString());
+    expect(schedule.priority).toBe("low");
+  });
+
+  it("records an incorrect checkpoint attempt accurately and flags repetition as weak", async () => {
+    const { service } = makeService();
+    const first = await service.recordAttempt("stu-1", { conceptId: CONCEPT, studentAnswer: "Guess", isCorrect: false, source: "understanding_check" });
+    expect(first.mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 0, incorrectAttempts: 1, consecutiveIncorrect: 1, masteryScore: 0 });
+    expect(first.schedule.priority).toBe("high");
+    const second = await service.recordAttempt("stu-1", { conceptId: CONCEPT, studentAnswer: "Copy a friend", isCorrect: false, source: "understanding_check" });
+    expect(second.mastery.masteryStatus).toBe("weak");
+    const weak = await service.getWeakConcepts("stu-1");
+    expect(weak.map((w) => w.conceptId)).toEqual([CONCEPT]);
+  });
+
+  it("recovers: a correct answer after incorrect ones updates counters and score server-side", async () => {
+    const { service } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const after = await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    expect(after.mastery).toMatchObject({ totalAttempts: 2, correctAttempts: 1, incorrectAttempts: 1, consecutiveCorrect: 1, consecutiveIncorrect: 0, masteryScore: 0.5, masteryStatus: "practicing" });
+  });
+
+  it("rejects unknown concepts and creates no mastery, attempt or schedule", async () => {
+    const { service, repo } = makeService();
+    await expect(service.recordAttempt("stu-1", { conceptId: "c6m-ch4", isCorrect: true, source: "understanding_check" }))
+      .rejects.toMatchObject({ code: "CONCEPT_NOT_FOUND", status: 404 });
+    await expect(service.recordAttempt("stu-1", { conceptId: "does-not-exist", isCorrect: false, source: "practice" }))
+      .rejects.toBeInstanceOf(RevisionError);
+    expect(await repo.listMastery("stu-1")).toEqual([]);
+    expect(await repo.listAttempts("stu-1")).toEqual([]);
+    expect(await repo.listSchedules("stu-1")).toEqual([]);
+    const overview = await service.getOverview("stu-1");
+    expect(overview.metrics).toMatchObject({ conceptsStarted: 0, totalAttempts: 0, accuracy: null });
+  });
+
+  it("keeps students isolated", async () => {
+    const { service } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    const other = await service.getOverview("stu-2");
+    expect(other.mastery).toEqual([]);
+    expect(other.metrics.totalAttempts).toBe(0);
+  });
+
+  it("schedules become due and appear in upcoming only inside the window", async () => {
+    const { service, setNow } = makeService();
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    expect((await service.getUpcoming("stu-1", 0))).toHaveLength(0);
+    setNow(day(1));
+    const upcoming = await service.getUpcoming("stu-1", 0);
+    expect(upcoming).toHaveLength(1);
+    expect(upcoming[0]).toMatchObject({ conceptId: CONCEPT, due: true });
+    expect((await service.getOverview("stu-1")).dueToday).toHaveLength(1);
+  });
+
+  it("sessions tally attempts and complete idempotently", async () => {
+    const { service } = makeService();
+    const session = await service.startSession("stu-1", "daily");
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, sessionId: session.sessionId, source: "revision" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, sessionId: session.sessionId, source: "revision" });
+    const done = await service.completeSession("stu-1", session.sessionId);
+    expect(done).toMatchObject({ totalQuestions: 2, correctAnswers: 1, conceptsReviewed: [CONCEPT] });
+    expect(done.completedAt).not.toBeNull();
+    const again = await service.completeSession("stu-1", session.sessionId);
+    expect(again.completedAt).toBe(done.completedAt);
+    await expect(service.getSession("stu-2", session.sessionId)).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" });
+  });
+});
+
+describe("processLearningEvent (Section 6 integration)", () => {
+  it("routes scored events to attempts and unscored events to history only", async () => {
+    const { service, repo } = makeService();
+    await processLearningEvent(service, "stu-1", { source: "lesson_completion", conceptId: CONCEPT });
+    expect(await repo.listMastery("stu-1")).toEqual([]);
+    expect((await repo.listEvents("stu-1")).map((e) => e.eventType)).toContain("lesson_completed");
+
+    await processLearningEvent(service, "stu-1", { source: "homework", conceptId: CONCEPT, isCorrect: true, questionId: "hw-1" });
+    const mastery = await repo.listMastery("stu-1");
+    expect(mastery).toHaveLength(1);
+    expect(mastery[0]).toMatchObject({ totalAttempts: 1, correctAttempts: 1 });
+
+    await expect(processLearningEvent(service, "stu-1", { source: "practice" })).rejects.toMatchObject({ code: "INVALID_LEARNING_EVENT" });
+  });
+});

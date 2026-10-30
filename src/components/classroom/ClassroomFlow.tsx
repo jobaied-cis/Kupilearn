@@ -13,6 +13,8 @@ import type { StructuredLesson } from "../../lib/lesson/engine";
 import type { RetrievedPassage } from "../../lib/rag/retrieve";
 import { adaptLearner, recordAnswer } from "../../lib/learner/adapt";
 import { loadLearner, saveLearner } from "../../lib/learner/store";
+import { createCheckpointReporter } from "../../lib/revision/client";
+import { conceptIdForTopicId } from "../../lib/revision/concepts";
 import type { ClassroomTurnResponse } from "../../lib/classroom/types";
 
 type Step = "class" | "book" | "chapter" | "teacher" | "classmates" | "live" | "progress";
@@ -87,6 +89,23 @@ export function ClassroomFlow() {
   const pausedRef = useRef(false);
   const voiceRef = useRef(true);
   const startedLessonRef = useRef<string | null>(null);
+  const [checkpointReporter] = useState(() => createCheckpointReporter());
+
+  /**
+   * Report a checkpoint answer to the Revision Engine. The only reliable
+   * concept mapping is chapter.topicId (the NCTB topic this lesson was
+   * generated from); lesson.id is NOT used (it can be a textbook chapter
+   * id). With no reliable mapping, no mastery record is created.
+   */
+  function reportCheckpointAttempt(isCorrect: boolean, studentAnswer: string) {
+    if (!question) return;
+    const conceptId = conceptIdForTopicId(chapter?.topicId);
+    if (!conceptId) {
+      console.warn(`[revision] No NCTB concept mapping for chapter ${chapter?.id ?? "unknown"} (topicId: ${chapter?.topicId ?? "none"}, mathChapterId: ${chapter?.mathChapterId ?? "none"}); revision attempt skipped.`);
+      return;
+    }
+    checkpointReporter({ conceptId, stepIdx, question: question.question, isCorrect, studentAnswer });
+  }
 
   const books = classLevel ? booksForClass(classLevel) : [];
   const [topicImages, setTopicImages] = useState<Record<number, string | null>>({});
@@ -324,6 +343,7 @@ export function ClassroomFlow() {
     setAttempts((n) => n + 1);
     setCorrectCount((n) => n + 1);
     saveLearner(recordAnswer(loadLearner(), true, chapter?.id));
+    reportCheckpointAttempt(true, question.answer);
     setPhase("praised");
     const praise = `Excellent work! You understood "${lesson.explanations[stepIdx]?.title}" — that is exactly right. I am proud of you. ${isLastStep ? "That was the last topic of this chapter." : "Let us move to the next topic."}`;
     say(teacher.name, "teacher", praise, teacher.color, teacher.id === "rakib" ? 1.05 : 0.9);
@@ -341,6 +361,7 @@ export function ClassroomFlow() {
     const token = ++runRef.current;
     setAttempts((n) => n + 1);
     saveLearner(recordAnswer(loadLearner(), false, chapter?.id));
+    reportCheckpointAttempt(false, picked);
     const text = reteachText();
     setReteachCount((n) => n + 1);
     setPhase("reteach");
