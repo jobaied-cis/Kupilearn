@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang, type Lang } from "../../lib/i18n";
 import { EDUCATION_LABEL, getProfile } from "../../lib/profile";
-import { GAMES, HOMEWORK, PRACTICE_QS, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { GAMES, HOMEWORK, PRACTICE_QS, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { RevisionDashboard } from "../revision/RevisionDashboard";
 import type { DashSection } from "./DashboardShell";
 import { ClassroomFlow } from "../classroom/ClassroomFlow";
 
@@ -151,25 +152,7 @@ function LessonView() {
 }
 
 function RevisionView() {
-  const { lang } = useLang();
-  const [done, setDone] = useState<boolean[]>(REVISION.map(() => false));
-  return (
-    <div className="mx-auto max-w-[84rem]">
-      <PageHead title={pick(lang, "Revision", "রিভিশন")} sub={pick(lang, "Your revision plan — little and often, so the light stays on after 7 days too.", "তোমার রিভিশনের পরিকল্পনা — অল্প অল্প করে, যাতে ৭ দিন পরেও আলোটা জ্বলে থাকে।")} />
-      <ul className="grid gap-3 lg:grid-cols-3">
-        {REVISION.map((r, i) => (
-          <li key={r.title.en} className={`${CARD} flex flex-col gap-2 p-4 ${done[i] ? "opacity-70" : ""}`}>
-            <span className="grid size-9 place-items-center rounded-lg bg-lagoon-soft text-padma-ink"><Icon name="refresh" className="size-4.5" strokeWidth={1.9} /></span>
-            <h2 className="font-display text-lg leading-snug font-bold text-ink">{t(lang, r.title)}</h2>
-            <p className="text-[0.85rem] text-ink-muted">{t(lang, r.meta)}</p>
-            <button type="button" aria-pressed={done[i]} onClick={() => setDone((d) => d.map((v, j) => (j === i ? !v : v)))} className={`${BTN_SM} mt-auto self-start`}>
-              <Icon name="check" className="size-4" strokeWidth={2.4} />{done[i] ? pick(lang, "Revised", "রিভিশন হয়েছে") : pick(lang, "Mark revised", "রিভিশন হয়েছে বলো")}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  return <RevisionDashboard />;
 }
 
 function PracticeView() {

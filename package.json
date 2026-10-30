@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "seed:graph": "node scripts/seed-graph.mjs"
+    "seed:graph": "node scripts/seed-graph.mjs",
+    "init:revision-db": "node scripts/revision/init-neo4j.mjs"
   },
   "dependencies": {
     "katex": "^0.19.1",
