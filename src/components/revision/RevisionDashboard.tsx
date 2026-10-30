@@ -7,7 +7,7 @@ import { pick, useLang } from "../../lib/i18n";
 import { revisionFetch } from "../../lib/revision/client";
 import { RevisionSessionRunner } from "./RevisionSessionRunner";
 import { loadActiveSessionId } from "../../lib/revision/session-runner";
-import type { EnrichedDailyPlan, RevisionOverview } from "../../lib/revision/service";
+import type { EnrichedDailyPlan, RevisionOverview, TargetedQuiz } from "../../lib/revision/service";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60";
@@ -34,6 +34,7 @@ export function RevisionDashboard() {
   const [plan, setPlan] = useState<EnrichedDailyPlan | null>(null);
   const [showRunner, setShowRunner] = useState(false);
   const [resumeId, setResumeId] = useState<string | null>(null);
+  const [quiz, setQuiz] = useState<TargetedQuiz | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -69,6 +70,17 @@ export function RevisionDashboard() {
     }
   }
 
+  async function startQuiz() {
+    try {
+      const res = await revisionFetch<{ quiz: TargetedQuiz }>("/api/revision/targeted-quiz");
+      setQuiz(res.quiz);
+      setResumeId(null);
+      setShowRunner(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "FAILED");
+    }
+  }
+
   const inProgress = data?.recentSessions.find((s) => !s.completedAt && (loadActiveSessionId() === null || s.sessionId === loadActiveSessionId())) ?? data?.recentSessions.find((s) => !s.completedAt) ?? null;
 
   if (error && !data) {
@@ -93,7 +105,7 @@ export function RevisionDashboard() {
     return (
       <div className="mx-auto flex max-w-[84rem] flex-col gap-4">
         <h1 className="text-[clamp(1.35rem,3vw,1.8rem)] leading-tight text-ink">{pick(lang, "Revision session", "রিভিশন সেশন")}</h1>
-        <RevisionSessionRunner items={plan?.days[0]?.items ?? []} resumeSessionId={resumeId} reviewedConceptIds={inProgress?.conceptsReviewed ?? []} onDone={() => { setShowRunner(false); setResumeId(null); void load(); }} />
+        <RevisionSessionRunner items={plan?.days[0]?.items ?? []} resumeSessionId={resumeId} reviewedConceptIds={inProgress?.conceptsReviewed ?? []} quizConcepts={quiz?.concepts ?? null} onDone={() => { setShowRunner(false); setResumeId(null); setQuiz(null); void load(); }} />
       </div>
     );
   }
@@ -166,6 +178,9 @@ export function RevisionDashboard() {
 
         {/* Weak concepts */}
         <Section id="rev-weak" title={pick(lang, "Weak concepts", "দুর্বল টপিক")}>
+          <button type="button" className={`${BTN} mb-3`} onClick={() => void startQuiz()}>
+            <Icon name="target" className="size-4" strokeWidth={2} />{pick(lang, "Start targeted quiz", "টার্গেটেড কুইজ শুরু করো")}
+          </button>
           {data.weakConcepts.length === 0 ? (
             <Empty en="No weak concepts yet. Keep learning - this is where topics that need another look will show up." bn="এখনো কোনো দুর্বল টপিক নেই। শিখতে থাকো - যেসব টপিকে আবার নজর লাগবে সেগুলো এখানে আসবে।" />
           ) : (
@@ -175,6 +190,7 @@ export function RevisionDashboard() {
                   <span className="text-sm font-semibold text-ink">{lang === "bn" ? (row.concept?.nameBn ?? row.conceptId) : (row.concept?.name ?? row.conceptId)}</span>
                   <span className="text-sm font-bold text-shapla-ink">{pct(row.masteryScore)}</span>
                   {row.reasons?.length ? <span className="w-full text-xs text-ink-soft">{row.reasons.join(" ")}</span> : null}
+
                 </li>
               ))}
             </ul>

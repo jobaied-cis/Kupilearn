@@ -203,6 +203,28 @@ describe("concurrency-safe idempotency (Part 06)", () => {
   });
 });
 
+describe("targeted quiz queue (Part 07)", () => {
+  it("returns weak concepts with recently-correct question indexes", async () => {
+    const { service } = makeService();
+    const session = await service.startSession("stu-1", "weak_concepts");
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, questionId: "c8-math-algebraic:revision:0", isCorrect: true, sessionId: session.sessionId, source: "revision" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: false, source: "practice" });
+    const quiz = await service.getTargetedQuiz("stu-1");
+    expect(quiz.source).toBe("weak");
+    expect(quiz.concepts[0]).toMatchObject({ conceptId: CONCEPT, masteryStatus: "weak", recentlyCorrectIndexes: [0] });
+  });
+
+  it("falls back to due concepts, then honestly to none", async () => {
+    const { service } = makeService();
+    expect(await service.getTargetedQuiz("stu-1")).toEqual({ source: "none", concepts: [] });
+    await service.recordAttempt("stu-1", { conceptId: CONCEPT, isCorrect: true, source: "practice" });
+    const quiz = await service.getTargetedQuiz("stu-1");
+    expect(quiz.source).toBe("due");
+    expect(quiz.concepts.map((c) => c.conceptId)).toEqual([CONCEPT]);
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

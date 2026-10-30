@@ -12,7 +12,8 @@ import {
   saveActiveSessionId,
   selectSessionConcepts,
 } from "../../lib/revision/session-runner";
-import type { EnrichedPlannedItem } from "../../lib/revision/service";
+import type { EnrichedPlannedItem, TargetedQuizConcept } from "../../lib/revision/service";
+import { buildQuizQueue } from "../../lib/revision/quiz";
 import type { RevisionSession } from "../../lib/revision/types";
 import type { LessonQuestion } from "../../lib/lesson/engine";
 
@@ -31,10 +32,12 @@ interface Props {
   items: EnrichedPlannedItem[];
   resumeSessionId?: string | null;
   reviewedConceptIds?: string[];
+  /** Part 07: when provided, run a targeted quiz over these concepts instead of the daily plan. */
+  quizConcepts?: TargetedQuizConcept[] | null;
   onDone: () => void;
 }
 
-export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedConceptIds = [], onDone }: Props) {
+export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedConceptIds = [], quizConcepts = null, onDone }: Props) {
   const { lang } = useLang();
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [skipped, setSkipped] = useState<string[]>([]);
@@ -58,13 +61,13 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
           if (!sessionIdRef.current) {
             const created = await revisionFetch<{ session: RevisionSession }>("/api/revision/sessions", {
               method: "POST",
-              body: JSON.stringify({ sessionType: "daily" }),
+              body: JSON.stringify({ sessionType: quizConcepts ? "weak_concepts" : "daily" }),
             });
             sessionIdRef.current = created.session.sessionId;
             saveActiveSessionId(created.session.sessionId);
           }
           const planned = selectSessionConcepts(
-            items
+            quizConcepts ?? items
               .filter((i) => i.concept)
               .map((i) => ({ conceptId: i.conceptId, topicId: i.concept?.topicId ?? i.conceptId, classLevel: i.concept?.classLevel ?? 8 })),
           );
@@ -74,8 +77,9 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
           for (const concept of concepts) {
             if (built.length >= REVISION_CONFIG.session.maxQuestionsPerSession) break;
             const item = items.find((i) => i.conceptId === concept.conceptId);
-            const name = item?.concept?.name ?? concept.conceptId;
-            const nameBn = item?.concept?.nameBn ?? name;
+            const quizConcept = quizConcepts?.find((c) => c.conceptId === concept.conceptId);
+            const name = quizConcept?.name ?? item?.concept?.name ?? concept.conceptId;
+            const nameBn = quizConcept?.nameBn ?? item?.concept?.nameBn ?? name;
             try {
               const res = await fetch("/api/lessons", {
                 method: "POST",
@@ -99,7 +103,38 @@ export function RevisionSessionRunner({ items, resumeSessionId = null, reviewedC
           }
           if (cancelled) return;
           setSkipped(skippedNames);
-          setQueue(built);
+          if (quizConcepts) {
+            // Targeted quiz (Part 07): weak-first, interleaved, proven
+            // questions de-prioritized - selection over the same fetched
+            // lesson questions, nothing new generated.
+            const byConcept = new Map<string, QueueItem[]>();
+            for (const q of built) {
+              const list = byConcept.get(q.conceptId) ?? [];
+              list.push(q);
+              byConcept.set(q.conceptId, list);
+            }
+            const ordered = buildQuizQueue(
+              concepts.map((c) => {
+                const qc = quizConcepts.find((x) => x.conceptId === c.conceptId);
+                return {
+                  conceptId: c.conceptId,
+                  topicId: c.topicId,
+                  classLevel: c.classLevel,
+                  masteryStatus: qc?.masteryStatus ?? null,
+                  masteryScore: qc?.masteryScore ?? null,
+                  overdueDays: qc?.overdueDays ?? 0,
+                  questionCount: byConcept.get(c.conceptId)?.length ?? 0,
+                  recentlyCorrectIndexes: qc?.recentlyCorrectIndexes ?? [],
+                };
+              }),
+            );
+            setQueue(ordered.flatMap((o) => {
+              const q = byConcept.get(o.conceptId)?.[o.questionIndex];
+              return q ? [q] : [];
+            }));
+          } else {
+            setQueue(built);
+          }
         } catch {
           if (!cancelled) setFatal("SESSION_FAILED");
         }

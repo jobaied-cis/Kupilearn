@@ -7,6 +7,7 @@ import { POST as attemptsPOST } from "./attempts/route";
 import { POST as eventsPOST } from "./events/route";
 import { GET as sessionsGET, POST as sessionsPOST } from "./sessions/route";
 import { GET as dailyPlanGET } from "./daily-plan/route";
+import { GET as targetedQuizGET } from "./targeted-quiz/route";
 import { InMemoryRevisionRepository, setRevisionRepositoryForTests } from "@/lib/revision/repository";
 
 const CONCEPT = "c8-math-algebraic";
@@ -84,6 +85,16 @@ describe("GET /api/revision/daily-plan (Part 05)", () => {
 
     const theirs = await dailyPlanGET(new Request("http://localhost/api/revision/daily-plan", { headers: H("stu-2") }));
     expect(((await theirs.json()) as { plan: { totalDue: number } }).plan.totalDue).toBe(0);
+  });
+});
+
+describe("GET /api/revision/targeted-quiz (Part 07)", () => {
+  it("requires ownership and returns an honest empty queue for a new student", async () => {
+    expect((await targetedQuizGET(new Request("http://localhost/api/revision/targeted-quiz"))).status).toBe(401);
+    expect((await targetedQuizGET(new Request("http://localhost/api/revision/targeted-quiz?studentId=stu-2", { headers: H("stu-1") }))).status).toBe(403);
+    const res = await targetedQuizGET(new Request("http://localhost/api/revision/targeted-quiz", { headers: H("stu-1") }));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { quiz: { source: string; concepts: unknown[] } }).quiz).toEqual({ source: "none", concepts: [] });
   });
 });
 

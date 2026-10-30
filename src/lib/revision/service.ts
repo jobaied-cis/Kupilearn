@@ -3,7 +3,7 @@ import { REVISION_CONFIG } from "./config";
 import { getConcept, type ConceptDefinition } from "./concepts";
 import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyMastery, isWeak, weaknessReasons } from "./mastery";
 import { compareScheduleUrgency, createSchedule, isDue, nextReview } from "./scheduling";
-import { buildDailyPlan, type DailyPlanResult, type PlannedItem } from "./planning";
+import { buildDailyPlan, dhakaDateString, dhakaDayDiff, type DailyPlanResult, type PlannedItem } from "./planning";
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
@@ -15,6 +15,7 @@ import {
   type RevisionEventType,
   type RevisionSchedule,
   type RevisionSession,
+  type MasteryStatus,
   type SessionType,
   type StudentConceptMastery,
 } from "./types";
@@ -260,6 +261,63 @@ export class RevisionService {
     };
   }
 
+  /**
+   * Targeted quiz queue data (Part 07). Returns the ranked concept refs
+   * the client quiz is built from: weak concepts first, or - honestly
+   * labelled - due concepts when nothing is weak, or an empty queue.
+   * Recently-correct question indexes are derived from recorded attempts
+   * so the selector can avoid re-asking proven questions.
+   */
+  async getTargetedQuiz(studentId: string): Promise<TargetedQuiz> {
+    const weak = await this.getWeakConcepts(studentId);
+    let source: TargetedQuiz["source"] = "weak";
+    let refs: { conceptId: string; masteryStatus: MasteryStatus | null; masteryScore: number | null }[] =
+      weak.map((m) => ({ conceptId: m.conceptId, masteryStatus: m.masteryStatus, masteryScore: m.masteryScore }));
+    if (refs.length === 0) {
+      const plan = await this.getDailyPlan(studentId);
+      const dueIds = [...new Set([...plan.days.flatMap((d) => d.items), ...plan.carriedForward].map((i) => i.conceptId))];
+      const mastery = await this.repo.listMastery(studentId);
+      const byId = new Map(mastery.map((m) => [m.conceptId, m]));
+      refs = dueIds.map((conceptId) => ({
+        conceptId,
+        masteryStatus: byId.get(conceptId)?.masteryStatus ?? null,
+        masteryScore: byId.get(conceptId)?.masteryScore ?? null,
+      }));
+      source = refs.length > 0 ? "due" : "none";
+    }
+    const today = dhakaDateString(this.now());
+    const concepts: TargetedQuizConcept[] = [];
+    for (const ref of refs) {
+      const concept = getConcept(ref.conceptId);
+      if (!concept) continue;
+      const [schedule, attempts] = await Promise.all([
+        this.repo.getSchedule(studentId, ref.conceptId),
+        this.repo.listAttempts(studentId, { conceptId: ref.conceptId, limit: REVISION_CONFIG.mastery.recentAttemptWindow }),
+      ]);
+      const recentlyCorrectIndexes = [
+        ...new Set(
+          attempts
+            .filter((a) => a.isCorrect && a.questionId)
+            .map((a) => /(?:^|:)(\d+)$/.exec(a.questionId ?? "")?.[1])
+            .filter((v): v is string => v !== undefined)
+            .map(Number),
+        ),
+      ].sort((a, b) => a - b);
+      concepts.push({
+        conceptId: ref.conceptId,
+        topicId: concept.topicId,
+        classLevel: concept.classLevel,
+        name: concept.name,
+        nameBn: concept.nameBn,
+        masteryStatus: ref.masteryStatus,
+        masteryScore: ref.masteryScore,
+        overdueDays: schedule ? dhakaDayDiff(dhakaDateString(new Date(schedule.scheduledAt)), today) : 0,
+        recentlyCorrectIndexes,
+      });
+    }
+    return { source, concepts };
+  }
+
   async getOverview(studentId: string): Promise<RevisionOverview> {
     const [mastery, attempts, sessions, upcoming] = await Promise.all([
       this.repo.listMastery(studentId),
@@ -292,6 +350,22 @@ export interface EnrichedPlannedItem extends PlannedItem {
 export interface EnrichedDailyPlan extends Omit<DailyPlanResult, "days" | "carriedForward"> {
   days: { date: string; items: EnrichedPlannedItem[] }[];
   carriedForward: EnrichedPlannedItem[];
+}
+
+export interface TargetedQuizConcept {
+  conceptId: string;
+  topicId: string;
+  classLevel: number;
+  name: string;
+  nameBn: string;
+  masteryStatus: MasteryStatus | null;
+  masteryScore: number | null;
+  overdueDays: number;
+  recentlyCorrectIndexes: number[];
+}
+export interface TargetedQuiz {
+  source: "weak" | "due" | "none";
+  concepts: TargetedQuizConcept[];
 }
 
 export function createRevisionService(): RevisionService {
