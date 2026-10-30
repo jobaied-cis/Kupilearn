@@ -40,6 +40,11 @@ export const REVISION_CONFIG = {
     /** Asia/Dhaka is UTC+6 year-round (no DST): fixed offset day math. */
     dayBoundaryOffsetMinutes: 360,
   },
+  /** Daily revision session runner (Part 06). Keep sessions short. */
+  session: {
+    questionsPerConcept: 2,
+    maxQuestionsPerSession: 10,
+  },
   /** Mastery algorithm (Part 03): deterministic, observable answers only. */
   mastery: {
     recentAttemptWindow: 20,

@@ -3,6 +3,7 @@ import type { RevisionNeo4jExecutor } from "./connection";
 import { revisionDbUnavailable } from "./connection";
 import {
   ADD_ATTEMPT,
+  ADD_ATTEMPT_ONCE,
   ADD_EVENT,
   GET_MASTERY,
   GET_SCHEDULE,
@@ -27,12 +28,13 @@ import {
   toSchedule,
   toSession,
 } from "./queries";
-import type {
-  RevisionAttempt,
-  RevisionEvent,
-  RevisionSchedule,
-  RevisionSession,
-  StudentConceptMastery,
+import {
+  DuplicateAttemptError,
+  type RevisionAttempt,
+  type RevisionEvent,
+  type RevisionSchedule,
+  type RevisionSession,
+  type StudentConceptMastery,
 } from "../types";
 
 /**
@@ -44,6 +46,11 @@ import type {
  *   write transaction: they commit together or roll back together, and a
  *   failure surfaces as REVISION_DB_UNAVAILABLE (503). Success is never
  *   reported for a failed write.
+ * - The bundle's attempt write is CREATE-once (ADD_ATTEMPT_ONCE): the
+ *   unique constraint on RevisionAttempt.id makes a duplicate attempt id
+ *   fail the whole transaction, which the service turns into an
+ *   idempotent no-op (DuplicateAttemptError). Direct addAttempt calls
+ *   keep the idempotent MERGE.
  * - Only the Part 01 entity fields are stored. No student names, school
  *   names, addresses or other personal profile data exist in these
  *   records; persisted event metadata is additionally filtered
@@ -143,13 +150,20 @@ export class Neo4jRevisionRepository implements RevisionRepository {
   async saveAttemptOutcome(outcome: AttemptOutcome): Promise<void> {
     try {
       await this.executor.writeTransaction(async (run) => {
-        await run(ADD_ATTEMPT, attemptParams(outcome.attempt));
+        await run(ADD_ATTEMPT_ONCE, attemptParams(outcome.attempt));
         await run(UPSERT_MASTERY, masteryParams(outcome.mastery));
         await run(UPSERT_SCHEDULE, scheduleParams(outcome.schedule));
         await run(ADD_EVENT, eventParams(outcome.event));
       });
     } catch (error) {
+      if (isConstraintViolation(error)) throw new DuplicateAttemptError(outcome.attempt.id);
       throw revisionDbUnavailable(error);
     }
   }
+}
+
+/** Neo4j unique-constraint failures carry this error code prefix. */
+export function isConstraintViolation(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code.includes("ConstraintValidationFailed");
 }

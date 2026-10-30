@@ -156,6 +156,53 @@ describe("daily plan through the service (Part 05)", () => {
   });
 });
 
+describe("concurrency-safe idempotency (Part 06)", () => {
+  const sessionAttempt = { conceptId: CONCEPT, questionId: "c8-math-algebraic:revision:0", studentAnswer: "Read carefully", isCorrect: true, source: "revision" as const };
+
+  it("scores a sequential duplicate exactly once", async () => {
+    const { service, repo } = makeService();
+    const session = await service.startSession("stu-1", "daily");
+    const first = await service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: session.sessionId });
+    const second = await service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: session.sessionId });
+    expect(first.duplicate).toBeUndefined();
+    expect(second.duplicate).toBe(true);
+    expect(second.attempt.id).toBe(first.attempt.id);
+    expect(await repo.listAttempts("stu-1")).toHaveLength(1);
+    const stored = await service.getSession("stu-1", session.sessionId);
+    expect(stored).toMatchObject({ totalQuestions: 1, correctAnswers: 1 });
+    const mastery = await repo.listMastery("stu-1");
+    expect(mastery[0]?.totalAttempts).toBe(1);
+  });
+
+  it("scores two SIMULTANEOUS identical submissions exactly once", async () => {
+    const { service, repo } = makeService();
+    const session = await service.startSession("stu-1", "daily");
+    const results = await Promise.all([
+      service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: session.sessionId }),
+      service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: session.sessionId }),
+    ]);
+    expect(results.filter((r) => r.duplicate)).toHaveLength(1);
+    expect(results[0]?.attempt.id).toBe(results[1]?.attempt.id);
+    expect(await repo.listAttempts("stu-1")).toHaveLength(1);
+    expect(await repo.listEvents("stu-1")).toHaveLength(2); // session-start + one attempt event
+    const stored = await service.getSession("stu-1", session.sessionId);
+    expect(stored.totalQuestions).toBe(1);
+    expect((await repo.listMastery("stu-1"))[0]?.totalAttempts).toBe(1);
+  });
+
+  it("does not dedupe different questions, different sessions, or session-less attempts", async () => {
+    const { service, repo } = makeService();
+    const s1 = await service.startSession("stu-1", "daily");
+    const s2 = await service.startSession("stu-1", "daily");
+    await service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: s1.sessionId });
+    await service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: s1.sessionId, questionId: "c8-math-algebraic:revision:1" });
+    await service.recordAttempt("stu-1", { ...sessionAttempt, sessionId: s2.sessionId });
+    await service.recordAttempt("stu-1", { ...sessionAttempt }); // classroom-style, no session
+    await service.recordAttempt("stu-1", { ...sessionAttempt }); // still scored: no idempotency identity
+    expect(await repo.listAttempts("stu-1")).toHaveLength(5);
+  });
+});
+
 describe("processLearningEvent (Section 6 integration)", () => {
   it("routes scored events to attempts and unscored events to history only", async () => {
     const { service, repo } = makeService();

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Neo4jRevisionRepository } from "../neo4j/neo4j-repository";
 import type { RevisionNeo4jExecutor, RowRunner } from "../neo4j/connection";
 import * as Q from "../neo4j/queries";
-import { RevisionError, type RevisionAttempt, type RevisionEvent, type RevisionSchedule, type RevisionSession, type StudentConceptMastery } from "../types";
+import { DuplicateAttemptError, RevisionError, type RevisionAttempt, type RevisionEvent, type RevisionSchedule, type RevisionSession, type StudentConceptMastery } from "../types";
 
 type Call = { cypher: string; params: Record<string, unknown> };
 
@@ -130,7 +130,7 @@ describe("Neo4jRevisionRepository transactions", () => {
     const fake = new FakeExecutor();
     await new Neo4jRevisionRepository(fake).saveAttemptOutcome({ attempt, mastery, schedule, event });
     expect(fake.transactions).toBe(1);
-    expect(fake.committed.map((c) => c.cypher)).toEqual([Q.ADD_ATTEMPT, Q.UPSERT_MASTERY, Q.UPSERT_SCHEDULE, Q.ADD_EVENT]);
+    expect(fake.committed.map((c) => c.cypher)).toEqual([Q.ADD_ATTEMPT_ONCE, Q.UPSERT_MASTERY, Q.UPSERT_SCHEDULE, Q.ADD_EVENT]);
   });
 
   it("rolls back: a failure mid-transaction commits nothing and throws a safe 503", async () => {
@@ -153,6 +153,46 @@ describe("Neo4jRevisionRepository transactions", () => {
       writeTransaction: async () => { throw new Error("ServiceUnavailable"); },
     };
     await expect(new Neo4jRevisionRepository(down).upsertMastery(mastery)).rejects.toMatchObject({ code: "REVISION_DB_UNAVAILABLE", status: 503 });
+  });
+});
+
+describe("Neo4j create-once bundle (Part 06 concurrency)", () => {
+  it("uses ADD_ATTEMPT_ONCE in the bundle; a constraint failure rolls back everything and becomes DuplicateAttemptError", async () => {
+    const existingIds = new Set<string>();
+    const committed: Call[] = [];
+    const uniqueExecutor: RevisionNeo4jExecutor = {
+      run: async () => [],
+      writeTransaction: async (work) => {
+        const staged: Call[] = [];
+        const result = await work(async (cypher, params) => {
+          if (cypher === Q.ADD_ATTEMPT_ONCE) {
+            if (existingIds.has(String(params.id))) {
+              throw Object.assign(new Error("constraint failed"), { code: "Neo.ClientError.Schema.ConstraintValidationFailed" });
+            }
+            existingIds.add(String(params.id));
+          }
+          staged.push({ cypher, params });
+          return [];
+        });
+        committed.push(...staged);
+        return result;
+      },
+    };
+    const repo = new Neo4jRevisionRepository(uniqueExecutor);
+    await repo.saveAttemptOutcome({ attempt, mastery, schedule, event });
+    expect(committed.map((c) => c.cypher)).toEqual([Q.ADD_ATTEMPT_ONCE, Q.UPSERT_MASTERY, Q.UPSERT_SCHEDULE, Q.ADD_EVENT]);
+
+    let caught: unknown;
+    try {
+      await repo.saveAttemptOutcome({ attempt, mastery, schedule, event });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(DuplicateAttemptError);
+    // Rollback: the failed transaction committed nothing further.
+    expect(committed).toHaveLength(4);
+    // Direct addAttempt remains the idempotent MERGE from Part 02.
+    await repo.addAttempt(attempt);
   });
 });
 

@@ -1,4 +1,4 @@
-import { RevisionError, type RevisionAttempt, type RevisionEvent, type RevisionSchedule, type RevisionSession, type StudentConceptMastery } from "./types";
+import { DuplicateAttemptError, RevisionError, type RevisionAttempt, type RevisionEvent, type RevisionSchedule, type RevisionSession, type StudentConceptMastery } from "./types";
 import { Neo4jRevisionRepository } from "./neo4j/neo4j-repository";
 import { createRevisionNeo4jExecutor } from "./neo4j/connection";
 
@@ -48,6 +48,7 @@ export class InMemoryRevisionRepository implements RevisionRepository {
   private events: RevisionEvent[] = [];
 
   async saveAttemptOutcome(outcome: AttemptOutcome): Promise<void> {
+    if (this.attempts.some((a) => a.id === outcome.attempt.id)) throw new DuplicateAttemptError(outcome.attempt.id);
     await this.addAttempt(outcome.attempt);
     await this.upsertMastery(outcome.mastery);
     await this.upsertSchedule(outcome.schedule);

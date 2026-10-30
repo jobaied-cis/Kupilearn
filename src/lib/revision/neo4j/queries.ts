@@ -144,6 +144,20 @@ SET a.student_id = $studentId, a.concept_id = $conceptId, a.question_id = $quest
     a.attempted_at = $attemptedAt
 RETURN a`;
 
+/**
+ * Create-once variant used ONLY inside the atomic bundle. The unique
+ * constraint on RevisionAttempt.id (schema.cypher) makes a duplicate id
+ * fail the whole transaction - mastery, schedule and event roll back
+ * with it. Direct addAttempt calls keep the idempotent ADD_ATTEMPT MERGE.
+ */
+export const ADD_ATTEMPT_ONCE = `
+CREATE (a:RevisionAttempt {id: $id})
+SET a.student_id = $studentId, a.concept_id = $conceptId, a.question_id = $questionId,
+    a.student_answer = $studentAnswer, a.is_correct = $isCorrect, a.difficulty = $difficulty,
+    a.response_time_ms = $responseTimeMs, a.session_id = $sessionId, a.source = $source,
+    a.attempted_at = $attemptedAt
+RETURN a`;
+
 export const LIST_ATTEMPTS = `
 MATCH (a:RevisionAttempt {student_id: $studentId})
 WHERE ($conceptId IS NULL OR a.concept_id = $conceptId)

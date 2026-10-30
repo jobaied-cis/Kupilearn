@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { REVISION_CONFIG } from "./config";
 import { getConcept, type ConceptDefinition } from "./concepts";
 import { applyAttemptToMastery, computeMasteryScore, deriveMasteryStatus, emptyMastery, isWeak, weaknessReasons } from "./mastery";
@@ -7,6 +7,7 @@ import { buildDailyPlan, type DailyPlanResult, type PlannedItem } from "./planni
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
 import {
+  DuplicateAttemptError,
   RevisionError,
   type RecordAttemptInput,
   type RecordEventInput,
@@ -89,7 +90,14 @@ export class RevisionService {
     if (!concept) throw new RevisionError("CONCEPT_NOT_FOUND", 404, `Unknown conceptId: ${input.conceptId}`);
     const now = this.now();
     const attempt: RevisionAttempt = {
-      id: `att_${randomUUID()}`,
+      // Concurrency-safe idempotency (Part 06): with a session + question
+      // identity, the attempt id is deterministic, so a simultaneous or
+      // repeated submission hits the repository's create-once guard
+      // instead of scoring twice. Session-less callers keep random ids.
+      id:
+        input.sessionId && input.questionId
+          ? `att_idem_${createHash("sha256").update(`${studentId}|${input.sessionId}|${input.questionId}`).digest("hex").slice(0, 32)}`
+          : `att_${randomUUID()}`,
       studentId,
       conceptId: input.conceptId,
       questionId: input.questionId ?? null,
@@ -127,7 +135,7 @@ export class RevisionService {
     // Attempt + mastery + schedule + event are written atomically by the
     // repository (one Neo4j write transaction when persisted). If the
     // store fails, this throws and no partial outcome is reported.
-    await this.repo.saveAttemptOutcome({
+    const duplicate = await this.saveOutcomeOrDuplicate({
       attempt,
       mastery,
       schedule,
@@ -141,8 +149,26 @@ export class RevisionService {
       },
     });
 
+    if (duplicate) {
+      const [currentMastery, currentSchedule] = await Promise.all([
+        this.repo.getMastery(studentId, input.conceptId),
+        this.repo.getSchedule(studentId, input.conceptId),
+      ]);
+      return { attempt, mastery: currentMastery ? enrichMastery(currentMastery) : enrichMastery(mastery), schedule: currentSchedule ?? schedule, duplicate: true };
+    }
     if (input.sessionId) await this.noteAttemptInSession(studentId, input.sessionId, input.conceptId, input.isCorrect);
     return { attempt, mastery: enrichMastery(mastery), schedule };
+  }
+
+  /** Writes the bundle; returns true when it was an idempotent duplicate. */
+  private async saveOutcomeOrDuplicate(outcome: Parameters<RevisionRepository["saveAttemptOutcome"]>[0]): Promise<boolean> {
+    try {
+      await this.repo.saveAttemptOutcome(outcome);
+      return false;
+    } catch (error) {
+      if (error instanceof DuplicateAttemptError) return true;
+      throw error;
+    }
   }
 
   private async noteAttemptInSession(studentId: string, sessionId: string, conceptId: string, isCorrect: boolean) {

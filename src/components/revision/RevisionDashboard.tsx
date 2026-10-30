@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang } from "../../lib/i18n";
 import { revisionFetch } from "../../lib/revision/client";
+import { RevisionSessionRunner } from "./RevisionSessionRunner";
+import { loadActiveSessionId } from "../../lib/revision/session-runner";
 import type { EnrichedDailyPlan, RevisionOverview } from "../../lib/revision/service";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
@@ -30,6 +32,8 @@ export function RevisionDashboard() {
   const { lang } = useLang();
   const [data, setData] = useState<RevisionOverview | null>(null);
   const [plan, setPlan] = useState<EnrichedDailyPlan | null>(null);
+  const [showRunner, setShowRunner] = useState(false);
+  const [resumeId, setResumeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -55,7 +59,8 @@ export function RevisionDashboard() {
   async function startDaily() {
     setBusy(true);
     try {
-      await revisionFetch("/api/revision/sessions", { method: "POST", body: JSON.stringify({ sessionType: "daily" }) });
+      setResumeId(null);
+      setShowRunner(true);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "FAILED");
@@ -63,6 +68,8 @@ export function RevisionDashboard() {
       setBusy(false);
     }
   }
+
+  const inProgress = data?.recentSessions.find((s) => !s.completedAt && (loadActiveSessionId() === null || s.sessionId === loadActiveSessionId())) ?? data?.recentSessions.find((s) => !s.completedAt) ?? null;
 
   if (error && !data) {
     return (
@@ -78,6 +85,15 @@ export function RevisionDashboard() {
       <div className="mx-auto max-w-[84rem]" role="status" aria-label={pick(lang, "Loading revision", "রিভিশন লোড হচ্ছে")}>
         <div className="mb-4 h-8 w-48 animate-pulse rounded-lg bg-ink/10" />
         <div className="h-64 animate-pulse rounded-2xl border-2 border-ink/10 bg-white" />
+      </div>
+    );
+  }
+
+  if (showRunner) {
+    return (
+      <div className="mx-auto flex max-w-[84rem] flex-col gap-4">
+        <h1 className="text-[clamp(1.35rem,3vw,1.8rem)] leading-tight text-ink">{pick(lang, "Revision session", "রিভিশন সেশন")}</h1>
+        <RevisionSessionRunner items={plan?.days[0]?.items ?? []} resumeSessionId={resumeId} reviewedConceptIds={inProgress?.conceptsReviewed ?? []} onDone={() => { setShowRunner(false); setResumeId(null); void load(); }} />
       </div>
     );
   }
@@ -138,6 +154,11 @@ export function RevisionDashboard() {
             </ul>
           )}
           {(() => { const more = (plan?.days.slice(1).reduce((n, d) => n + d.items.length, 0) ?? 0) + (plan?.carriedForward.length ?? 0); return more > 0 ? <p className="mt-2 text-xs text-ink-soft">{pick(lang, `${more} more planned for the next days - nothing is dropped.`, `আরও ${more}টি পরের দিনগুলোতে রাখা হয়েছে - কিছুই বাদ যাবে না।`)}</p> : null; })()}
+          {inProgress ? (
+            <button type="button" className={`${BTN} mt-3 mr-2`} onClick={() => { setResumeId(inProgress.sessionId); setShowRunner(true); }}>
+              <Icon name="refresh" className="size-4" strokeWidth={2} />{pick(lang, "Resume session", "সেশন আবার শুরু করো")} ({inProgress.correctAnswers}/{inProgress.totalQuestions})
+            </button>
+          ) : null}
           <button type="button" className={`${BTN} mt-3`} disabled={busy} onClick={() => void startDaily()}>
             <Icon name="refresh" className="size-4" strokeWidth={2} />{pick(lang, "Start a revision session", "রিভিশন সেশন শুরু করো")}
           </button>

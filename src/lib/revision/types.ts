@@ -176,6 +176,14 @@ export const LearningEventSchema = z.object({
 });
 export type LearningEvent = z.infer<typeof LearningEventSchema>;
 
+/** Thrown by repositories when an idempotent attempt write already exists. */
+export class DuplicateAttemptError extends Error {
+  constructor(readonly attemptId: string) {
+    super(`Duplicate attempt: ${attemptId}`);
+    this.name = "DuplicateAttemptError";
+  }
+}
+
 export class RevisionError extends Error {
   constructor(
     readonly code: string,
