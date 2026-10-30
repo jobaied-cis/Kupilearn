@@ -4,7 +4,7 @@ import type { RevisionSchedule, SchedulePriority } from "./types";
 
 /**
  * Scheduling foundation (Section 3C). Deterministic interval ladder only;
- * the adaptive algorithm of Part 02 plugs in behind `nextReview`.
+ * adaptive intervals are a later part, behind `nextReview` (Part 03 mastery feeds priority).
  */
 export interface NextReview {
   scheduledAt: string;

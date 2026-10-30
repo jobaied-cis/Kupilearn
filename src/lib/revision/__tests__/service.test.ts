@@ -22,21 +22,22 @@ describe("RevisionService attempt pipeline", () => {
       conceptId: CONCEPT, questionId: "q1", studentAnswer: "Read carefully", isCorrect: true, source: "understanding_check",
     });
     expect(attempt).toMatchObject({ studentId: "stu-1", conceptId: CONCEPT, isCorrect: true, studentAnswer: "Read carefully", source: "understanding_check" });
-    expect(mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 1, incorrectAttempts: 0, consecutiveCorrect: 1, masteryScore: 1, masteryStatus: "mastered" });
+    expect(mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 1, incorrectAttempts: 0, consecutiveCorrect: 1, masteryScore: 0.667, masteryStatus: "practicing" });
     expect(mastery.lastReviewedAt).toBe(T0.toISOString());
     expect(schedule.scheduledAt).toBe(day(1).toISOString());
-    expect(schedule.priority).toBe("low");
+    expect(schedule.priority).toBe("medium");
   });
 
   it("records an incorrect checkpoint attempt accurately and flags repetition as weak", async () => {
     const { service } = makeService();
     const first = await service.recordAttempt("stu-1", { conceptId: CONCEPT, studentAnswer: "Guess", isCorrect: false, source: "understanding_check" });
-    expect(first.mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 0, incorrectAttempts: 1, consecutiveIncorrect: 1, masteryScore: 0 });
+    expect(first.mastery).toMatchObject({ totalAttempts: 1, correctAttempts: 0, incorrectAttempts: 1, consecutiveIncorrect: 1, masteryScore: 0.333 });
     expect(first.schedule.priority).toBe("high");
     const second = await service.recordAttempt("stu-1", { conceptId: CONCEPT, studentAnswer: "Copy a friend", isCorrect: false, source: "understanding_check" });
     expect(second.mastery.masteryStatus).toBe("weak");
     const weak = await service.getWeakConcepts("stu-1");
     expect(weak.map((w) => w.conceptId)).toEqual([CONCEPT]);
+    expect(weak[0]?.reasons.join(" ")).toContain("incorrect");
   });
 
   it("recovers: a correct answer after incorrect ones updates counters and score server-side", async () => {

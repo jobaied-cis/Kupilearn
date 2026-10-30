@@ -44,7 +44,7 @@ describe("POST /api/revision/attempts", () => {
     const forged = await post("http://localhost/api/revision/attempts", { conceptId: CONCEPT, isCorrect: false, masteryScore: 1, masteryStatus: "mastered" });
     expect(forged.status).toBe(201);
     const forgedJson = await forged.json() as { mastery: { masteryScore: number; masteryStatus: string } };
-    expect(forgedJson.mastery.masteryScore).toBe(0);
+    expect(forgedJson.mastery.masteryScore).toBe(0.333);
     expect(forgedJson.mastery.masteryStatus).not.toBe("mastered");
 
     const good = await post("http://localhost/api/revision/attempts", { conceptId: CONCEPT, isCorrect: true, questionId: "q1", studentAnswer: "Read carefully" });

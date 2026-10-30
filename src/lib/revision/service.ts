@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { REVISION_CONFIG } from "./config";
 import { getConcept, type ConceptDefinition } from "./concepts";
-import { applyAttemptToMastery, emptyMastery, isWeak, placeholderMasteryScore } from "./mastery";
+import { applyAttemptToMastery, computeMasteryScore, emptyMastery, isWeak, weaknessReasons } from "./mastery";
 import { createSchedule, isDue, nextReview } from "./scheduling";
 import { computeRevisionMetrics, type RevisionMetrics } from "./analytics";
 import { getRevisionRepository, type RevisionRepository } from "./repository";
@@ -20,6 +20,10 @@ import {
 export interface EnrichedMastery extends StudentConceptMastery {
   concept: ConceptDefinition | null;
 }
+export interface WeakConcept extends EnrichedMastery {
+  /** Explainable, observable-signal reasons this concept is flagged weak. */
+  reasons: string[];
+}
 export interface EnrichedSchedule extends RevisionSchedule {
   concept: ConceptDefinition | null;
   due: boolean;
@@ -28,7 +32,7 @@ export interface RevisionOverview {
   studentId: string;
   metrics: RevisionMetrics;
   mastery: EnrichedMastery[];
-  weakConcepts: EnrichedMastery[];
+  weakConcepts: WeakConcept[];
   upcoming: EnrichedSchedule[];
   dueToday: EnrichedSchedule[];
   recentSessions: RevisionSession[];
@@ -98,9 +102,10 @@ export class RevisionService {
     };
     const previous = (await this.repo.getMastery(studentId, input.conceptId)) ?? emptyMastery(studentId, concept, now);
     const consecutiveCorrectAfter = input.isCorrect ? previous.consecutiveCorrect + 1 : 0;
-    // Priority/interval must reflect the state AFTER this attempt, so the
-    // score is projected before the schedule is created.
-    const scoreAfter = placeholderMasteryScore(previous.correctAttempts + (input.isCorrect ? 1 : 0), previous.totalAttempts + 1);
+    // Mastery (Part 03) comes from the concept's attempt history including
+    // this attempt, so scheduling and the stored record share one score.
+    const history = await this.repo.listAttempts(studentId, { conceptId: input.conceptId, limit: REVISION_CONFIG.mastery.recentAttemptWindow });
+    const scoreAfter = computeMasteryScore([...history, attempt], now);
     const review = nextReview(now, {
       isCorrect: input.isCorrect,
       consecutiveCorrectAfterAttempt: consecutiveCorrectAfter,
@@ -108,7 +113,7 @@ export class RevisionService {
       totalAttempts: previous.totalAttempts + 1,
       consecutiveIncorrect: input.isCorrect ? 0 : previous.consecutiveIncorrect + 1,
     });
-    const mastery = applyAttemptToMastery(previous, { isCorrect: input.isCorrect, nextReviewAt: review.scheduledAt }, now);
+    const mastery = applyAttemptToMastery(previous, { isCorrect: input.isCorrect, nextReviewAt: review.scheduledAt, masteryScore: scoreAfter }, now);
     const schedule = createSchedule(studentId, input.conceptId, review, now, (await this.repo.getSchedule(studentId, input.conceptId)) ?? undefined);
 
     // Attempt + mastery + schedule + event are written atomically by the
@@ -179,9 +184,9 @@ export class RevisionService {
     return (await this.repo.listMastery(studentId, filter)).map(enrichMastery);
   }
 
-  async getWeakConcepts(studentId: string): Promise<EnrichedMastery[]> {
+  async getWeakConcepts(studentId: string): Promise<WeakConcept[]> {
     const all = await this.repo.listMastery(studentId);
-    return all.filter((m) => m.masteryStatus === "weak" || isWeak(m)).map(enrichMastery)
+    return all.filter((m) => m.masteryStatus === "weak" || isWeak(m)).map((m) => ({ ...enrichMastery(m), reasons: weaknessReasons(m) }))
       .sort((a, b) => a.masteryScore - b.masteryScore);
   }
 

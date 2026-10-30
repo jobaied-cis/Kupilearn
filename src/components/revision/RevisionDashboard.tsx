@@ -146,6 +146,7 @@ export function RevisionDashboard() {
                 <li key={row.conceptId} className="flex items-center justify-between gap-2 rounded-xl bg-coral-soft px-3 py-2">
                   <span className="text-sm font-semibold text-ink">{lang === "bn" ? (row.concept?.nameBn ?? row.conceptId) : (row.concept?.name ?? row.conceptId)}</span>
                   <span className="text-sm font-bold text-shapla-ink">{pct(row.masteryScore)}</span>
+                  {row.reasons?.length ? <span className="w-full text-xs text-ink-soft">{row.reasons.join(" ")}</span> : null}
                 </li>
               ))}
             </ul>

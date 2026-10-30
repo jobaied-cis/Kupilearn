@@ -1,7 +1,7 @@
 /**
  * Revision Engine configuration (Part 01 foundation).
  * Deterministic only - no AI model is consulted for any value here.
- * Part 02 may replace the placeholder mastery scoring, but must keep
+ * Part 03 replaced placeholder scoring with the real mastery algorithm;
  * these knobs centralised so scheduling/scoring stay testable.
  */
 export const REVISION_CONFIG = {
@@ -20,6 +20,16 @@ export const REVISION_CONFIG = {
   /** Hard caps so a single response can never dump unbounded history. */
   maxUpcoming: 50,
   maxHistory: 50,
+  /** Mastery algorithm (Part 03): deterministic, observable answers only. */
+  mastery: {
+    recentAttemptWindow: 20,
+    recencyHalfLifeDays: 14,
+    priorScore: 0.5,
+    priorWeight: 2,
+    difficultyWeights: { 1: 0.8, 2: 1, 3: 1.25 } as Record<number, number>,
+    masteredMinAttempts: 4,
+    masteredMinConsecutiveCorrect: 3,
+  },
 } as const;
 
 export type RevisionConfig = typeof REVISION_CONFIG;
