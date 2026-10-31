@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createRng, randInt } from "../practice/engine";
 import { findTopic, type Topic } from "../nctb/catalog";
+import { adaptLearner, type LearnerProfile } from "../learner/adapt";
 
 /**
  * Homework engine: assignments are first-class records (not static
@@ -114,14 +115,72 @@ interface TopicContext {
   topic: Topic;
 }
 
-function instructionsFor(ctx: TopicContext, seed: string): { en: string; bn: string } {
+/* ---------------- learner persona ---------------- */
+
+/**
+ * Homework is shaped by the learner's persona: self-chosen style and
+ * pace (from onboarding, changeable anytime) plus behavior-derived
+ * difficulty. Style changes how work is framed, pace changes volume,
+ * difficulty changes number ranges — never a label about the learner.
+ */
+export interface HomeworkPersona {
+  style: LearnerProfile["preferredStyle"];
+  pace: LearnerProfile["pace"];
+  difficulty: 1 | 2 | 3;
+}
+
+export function personaFromLearner(learner: LearnerProfile): HomeworkPersona {
+  return {
+    style: learner.preferredStyle,
+    pace: learner.pace,
+    difficulty: adaptLearner(learner).difficulty,
+  };
+}
+
+const VISUAL_START: HomeworkTask = {
+  text: "Start visual: draw a quick diagram or picture for this topic first",
+  textBn: "আগে ছবি এঁকে শুরু করো: টপিকটির একটি চিত্র আঁকো",
+  done: false,
+};
+const EXAMPLE_START: HomeworkTask = {
+  text: "First look at one worked example in your book (5 minutes)",
+  textBn: "আগে বইয়ের একটি করে-দেখানো উদাহরণ দেখো (৫ মিনিট)",
+  done: false,
+};
+const STRETCH_TASK: HomeworkTask = {
+  text: "Stretch: invent a harder version of this work and solve it",
+  textBn: "চ্যালেঞ্জ: নিজে কঠিন একটি সংস্করণ বানিয়ে সমাধান করো",
+  done: false,
+};
+
+/** Shapes a checklist for a persona: framing by style, volume by pace. */
+export function shapeTasksForPersona(
+  tasks: HomeworkTask[],
+  persona?: HomeworkPersona,
+): HomeworkTask[] {
+  if (!persona) return tasks;
+  let out = [...tasks];
+  if (persona.style === "visual") out = [VISUAL_START, ...out];
+  if (persona.style === "examples-first") out = [EXAMPLE_START, ...out];
+  if (persona.pace === "slow") out = out.slice(0, Math.max(2, out.length - 2));
+  if (persona.pace === "fast" || persona.style === "challenge") {
+    if (!out.some((t) => t.text.startsWith("Stretch:"))) out = [...out, STRETCH_TASK];
+  }
+  return out;
+}
+
+function instructionsFor(
+  ctx: TopicContext,
+  seed: string,
+  difficulty: 1 | 2 | 3 = 2,
+): { en: string; bn: string } {
   const r = createRng(seed);
   const t = ctx.topic;
   switch (t.id.replace(/^c\d+-/, "")) {
     case "math-equations": {
       const eq = () => {
-        const x = randInt(r, 2, 12);
-        const a = randInt(r, 2, 6);
+        const x = randInt(r, 2, difficulty === 3 ? 18 : difficulty === 1 ? 9 : 12);
+        const a = randInt(r, 2, difficulty === 1 ? 4 : 6);
         const b = randInt(r, 1, 15);
         const neg = r() < 0.5;
         return `${a}x ${neg ? "−" : "+"} ${b} = ${a * x + (neg ? -b : b)}`;
@@ -133,7 +192,8 @@ function instructionsFor(ctx: TopicContext, seed: string): { en: string; bn: str
       };
     }
     case "math-factors": {
-      const pair = () => `${randInt(r, 6, 36)} ও ${randInt(r, 6, 36)}`;
+      const hi = difficulty === 1 ? 24 : difficulty === 3 ? 60 : 36;
+      const pair = () => `${randInt(r, 6, hi)} ও ${randInt(r, 6, hi)}`;
       return {
         en: `Find the LCM and HCF of (${pair()}) and (${pair()}). Show the factor lists you used.`,
         bn: `(${pair()}) এবং (${pair()})-এর ল.সা.গু ও গ.সা.গু বের করো। গুণনীয়কের তালিকা দেখাও।`,
@@ -348,6 +408,8 @@ export interface GenerateArgs {
   source: HomeworkAssignment["source"];
   now: Date;
   recurrence?: HomeworkAssignment["recurrence"];
+  /** Shapes volume, framing, and number ranges to the learner. */
+  persona?: HomeworkPersona;
 }
 
 export function generateHomeworkFromTopic(args: GenerateArgs): HomeworkAssignment {
@@ -362,8 +424,8 @@ export function generateHomeworkFromTopic(args: GenerateArgs): HomeworkAssignmen
     topic: found.topic,
   };
   const seed = `${args.topicId}|${args.now.toDateString()}|${args.source}`;
-  const { en, bn } = instructionsFor(ctx, seed);
-  const tasks = tasksFor(ctx, seed);
+  const { en, bn } = instructionsFor(ctx, seed, args.persona?.difficulty ?? 2);
+  const tasks = shapeTasksForPersona(tasksFor(ctx, seed), args.persona);
   return HomeworkAssignmentSchema.parse({
     id: newHomeworkId(args.now),
     title: en,
@@ -395,16 +457,20 @@ export function generateReviewHomework(
   classLevel: number,
   mistakeTopicIds: string[],
   now: Date,
+  persona?: HomeworkPersona,
 ): HomeworkAssignment | null {
   for (const topicId of mistakeTopicIds) {
     const found =
       findTopic(classLevel, topicId) ?? findTopic(classLevel, `c${classLevel}-${topicId}`);
     if (!found) continue;
-    const tasks = [
-      task(`Re-read your lesson notes on ${found.topic.title}`, `${found.topic.titleBn} লেসনের নোট আবার পড়ো`),
-      task("Write the key steps in your own words", "মূল ধাপগুলো নিজের ভাষায় লেখো"),
-      task(`Finish a 5-question practice set on ${found.topic.title}`, `${found.topic.titleBn}-এ ৫ প্রশ্নের অনুশীলন সেট শেষ করো`),
-    ];
+    const tasks = shapeTasksForPersona(
+      [
+        task(`Re-read your lesson notes on ${found.topic.title}`, `${found.topic.titleBn} লেসনের নোট আবার পড়ো`),
+        task("Write the key steps in your own words", "মূল ধাপগুলো নিজের ভাষায় লেখো"),
+        task(`Finish a 5-question practice set on ${found.topic.title}`, `${found.topic.titleBn}-এ ৫ প্রশ্নের অনুশীলন সেট শেষ করো`),
+      ],
+      persona,
+    );
     return HomeworkAssignmentSchema.parse({
       id: newHomeworkId(now),
       title: `Revise: ${found.topic.title}`,
@@ -519,6 +585,13 @@ export function pointsThisWeek(list: HomeworkAssignment[], now: Date): number {
 /** Overdue pending assignments — drives reminder nudges. */
 export function overdueCount(list: HomeworkAssignment[], now: Date): number {
   return list.filter((a) => isOverdue(a, now)).length;
+}
+
+/** Pushes the due time out (default: one day). Bucket becomes "custom". */
+export function snoozeAssignment(a: HomeworkAssignment, days = 1): HomeworkAssignment {
+  const due = new Date(a.dueAt);
+  due.setDate(due.getDate() + days);
+  return { ...a, dueAt: due.toISOString(), dueBucket: "custom" };
 }
 
 export function markDone(

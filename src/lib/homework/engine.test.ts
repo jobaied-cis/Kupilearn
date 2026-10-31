@@ -12,15 +12,20 @@ import {
   migrateLegacyDoneFlags,
   nextOccurrence,
   overdueCount,
+  personaFromLearner,
   pointsFor,
   pointsThisWeek,
+  shapeTasksForPersona,
+  snoozeAssignment,
   sortForDisplay,
   starterAssignments,
   taskProgress,
   toBnDigits,
   toggleTask,
   totalPoints,
+  type HomeworkPersona,
 } from "./engine";
+import { defaultLearner } from "../learner/adapt";
 
 const NOW = new Date("2026-08-04T10:00:00"); // a Tuesday
 
@@ -214,6 +219,51 @@ describe("homework recurrence, points, and richer tasks", () => {
     });
     expect(parsed.recurrence).toBe("none");
     expect(parsed.tasks).toEqual([]);
+  });
+});
+
+describe("persona-shaped homework", () => {
+  const base = generateHomeworkFromTopic({ classLevel: 6, topicId: "en-tense", dueBucket: "tonight", source: "custom", now: NOW });
+  const persona = (over: Partial<HomeworkPersona>): HomeworkPersona => ({
+    style: "step-by-step",
+    pace: "steady",
+    difficulty: 2,
+    ...over,
+  });
+
+  it("frames work by style: visual starts with drawing, examples-first with an example", () => {
+    const visual = generateHomeworkFromTopic({ classLevel: 6, topicId: "en-tense", dueBucket: "tonight", source: "custom", now: NOW, persona: persona({ style: "visual" }) });
+    expect(visual.tasks[0]!.text).toContain("Start visual");
+    const examples = generateHomeworkFromTopic({ classLevel: 6, topicId: "en-tense", dueBucket: "tonight", source: "custom", now: NOW, persona: persona({ style: "examples-first" }) });
+    expect(examples.tasks[0]!.text).toContain("worked example");
+    const challenge = generateHomeworkFromTopic({ classLevel: 6, topicId: "en-tense", dueBucket: "tonight", source: "custom", now: NOW, persona: persona({ style: "challenge" }) });
+    expect(challenge.tasks[challenge.tasks.length - 1]!.text).toContain("Stretch:");
+  });
+
+  it("sets volume by pace: slow trims, fast adds a stretch task", () => {
+    const slow = shapeTasksForPersona(base.tasks, persona({ pace: "slow" }));
+    const fast = shapeTasksForPersona(base.tasks, persona({ pace: "fast" }));
+    expect(slow.length).toBeLessThan(base.tasks.length);
+    expect(slow.length).toBeGreaterThanOrEqual(2);
+    expect(fast.length).toBe(base.tasks.length + 1);
+    expect(base.tasks.length).toBe(shapeTasksForPersona(base.tasks, persona({})).length);
+    expect(shapeTasksForPersona(base.tasks)).toBe(base.tasks); // no persona → untouched
+  });
+
+  it("derives the persona from the learner profile (style, pace, adaptive difficulty)", () => {
+    const learner = { ...defaultLearner("Rafi"), preferredStyle: "visual" as const, pace: "slow" as const };
+    const p = personaFromLearner(learner);
+    expect(p.style).toBe("visual");
+    expect(p.pace).toBe("slow");
+    expect([1, 2, 3]).toContain(p.difficulty);
+  });
+
+  it("snoozes work a day at a time", () => {
+    const hw = generateHomeworkFromTopic({ classLevel: 6, topicId: "math-area", dueBucket: "tonight", source: "custom", now: NOW });
+    const snoozed = snoozeAssignment(hw);
+    expect(new Date(snoozed.dueAt).getDate()).toBe(new Date(hw.dueAt).getDate() + 1);
+    expect(snoozed.dueBucket).toBe("custom");
+    expect(new Date(snoozeAssignment(hw, 3).dueAt).getDate()).toBe(new Date(hw.dueAt).getDate() + 3);
   });
 });
 

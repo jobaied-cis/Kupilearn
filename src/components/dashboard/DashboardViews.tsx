@@ -41,7 +41,9 @@ import {
   markDone,
   nextOccurrence,
   overdueCount,
+  personaFromLearner,
   pointsThisWeek,
+  snoozeAssignment,
   taskProgress,
   toggleTask,
   totalPoints,
@@ -336,8 +338,8 @@ function PracticeView() {
       .filter((item, i) => !gradePracticeSet(set, picks).correct[i])
       .map((item) => item.topicId);
     const assignment =
-      generateReviewHomework(learner.classLevel, [...new Set(wrongTopics)], new Date()) ??
-      generateReviewHomework(learner.classLevel, learner.mistakeTopics, new Date());
+      generateReviewHomework(learner.classLevel, [...new Set(wrongTopics)], new Date(), personaFromLearner(learner)) ??
+      generateReviewHomework(learner.classLevel, learner.mistakeTopics, new Date(), personaFromLearner(learner));
     if (!assignment) return;
     addAssignment(loadAssignments(learner.classLevel), assignment);
     setHwAdded(true);
@@ -558,6 +560,8 @@ function HomeworkView() {
   const [list, setList] = useState<HomeworkAssignment[]>([]);
   const [classLevel, setClassLevel] = useState(6);
   const [mistakeCount, setMistakeCount] = useState(0);
+  const [profile, setProfile] = useState<LearnerProfile | null>(null);
+  const [subjectFilter, setSubjectFilter] = useState("all");
   const [loaded, setLoaded] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBucket, setNewBucket] = useState<DueBucket>("tomorrow");
@@ -571,6 +575,7 @@ function HomeworkView() {
       const learner = loadLearner();
       setClassLevel(learner.classLevel);
       setMistakeCount(learner.mistakeTopics.length);
+      setProfile(learner);
       setList(loadAssignments(learner.classLevel));
       setLoaded(true);
     });
@@ -579,14 +584,16 @@ function HomeworkView() {
 
   const now = new Date();
   const stats = completionStats(list);
-  const pending = list.filter((a) => a.status !== "done");
+  const visible = subjectFilter === "all" ? list : list.filter((a) => a.subjectId === subjectFilter);
+  const subjects = [...new Map(list.map((a) => [a.subjectId, a.subjectTitle])).entries()];
+  const pending = visible.filter((a) => a.status !== "done");
   const overdue = pending.filter(
     (a) => new Date(a.dueAt).getTime() < now.getTime(),
   );
   const upcoming = pending
     .filter((a) => new Date(a.dueAt).getTime() >= now.getTime())
     .sort((a, b) => +new Date(a.dueAt) - +new Date(b.dueAt));
-  const completed = list.filter((a) => a.status === "done");
+  const completed = visible.filter((a) => a.status === "done");
 
   const topicOptions =
     getClass(classLevel)?.subjects.flatMap((s) =>
@@ -615,9 +622,49 @@ function HomeworkView() {
 
   function addReviewFromMistakes() {
     const learner = loadLearner();
-    const assignment = generateReviewHomework(learner.classLevel, learner.mistakeTopics, new Date());
+    const assignment = generateReviewHomework(
+      learner.classLevel,
+      learner.mistakeTopics,
+      new Date(),
+      personaFromLearner(learner),
+    );
     if (!assignment) return;
     setList((current) => addAssignment(current, assignment));
+  }
+
+  function updatePersona(patch: Partial<LearnerProfile>) {
+    if (!profile) return;
+    const next = { ...profile, ...patch, updatedAt: new Date().toISOString() };
+    saveLearner(next);
+    setProfile(next);
+  }
+
+  function snooze(a: HomeworkAssignment) {
+    setList((current) => {
+      const next = current.map((x) => (x.id === a.id ? snoozeAssignment(x) : x));
+      saveAssignments(next);
+      return next;
+    });
+  }
+
+  function printAssignment(a: HomeworkAssignment) {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const tasks = a.tasks.length
+      ? `<ol>${a.tasks.map((t) => `<li>☐ ${esc(lang === "bn" ? t.textBn : t.text)}</li>`).join("")}</ol>`
+      : "";
+    w.document.write(
+      `<!doctype html><html><head><title>${esc(a.title)}</title><style>body{font-family:Georgia,serif;margin:40px;color:#222}h1{font-size:22px}ol li{margin:10px 0;line-height:1.5}.meta{color:#555}.lines{margin-top:28px}.lines div{border-bottom:1px solid #bbb;height:34px}</style></head><body>` +
+        `<h1>${esc(lang === "bn" ? a.titleBn : a.title)}</h1>` +
+        `<p class="meta">${esc(a.subjectTitle)} · ${esc(a.topicTitle)} · ${esc(new Date(a.dueAt).toLocaleDateString())} · ~${a.estMinutes} min</p>` +
+        `<p>${esc(lang === "bn" ? a.instructionsBn : a.instructions)}</p>${tasks}` +
+        `<div class="lines"><div></div><div></div><div></div><div></div><div></div><div></div></div>` +
+        `</body></html>`,
+    );
+    w.document.close();
+    w.focus();
+    w.print();
   }
 
   function remove(a: HomeworkAssignment) {
@@ -664,6 +711,7 @@ function HomeworkView() {
       source: "custom",
       now: new Date(),
       recurrence: topicRecurrence,
+      persona: profile ? personaFromLearner(profile) : undefined,
     });
     setList((current) => addAssignment(current, assignment));
     setTopicPick("");
@@ -716,6 +764,14 @@ function HomeworkView() {
         <button type="button" aria-pressed={a.status === "done"} onClick={() => toggleDone(a)} className={BTN_SM}>
           <Icon name="check" className="size-4" strokeWidth={2.4} />{a.status === "done" ? pick(lang, "Done", "শেষ হয়েছে") : pick(lang, "Mark done", "শেষ হয়েছে বলো")}
         </button>
+        {a.status !== "done" ? (
+          <button type="button" onClick={() => snooze(a)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+            <Icon name="clock" className="size-4" strokeWidth={2} />{pick(lang, "Tomorrow instead", "কাল করব")}
+          </button>
+        ) : null}
+        <button type="button" onClick={() => printAssignment(a)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+          <Icon name="print" className="size-4" strokeWidth={2} />{pick(lang, "Print", "প্রিন্ট")}
+        </button>
         <button type="button" onClick={() => remove(a)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
           {pick(lang, "Remove", "বাদ দাও")}
         </button>
@@ -726,6 +782,54 @@ function HomeworkView() {
   return (
     <div className="mx-auto max-w-[84rem]">
       <PageHead title={pick(lang, "Homework", "হোমওয়ার্ক")} sub={pick(lang, "Tonight's work — tick each one off as you finish. Stuck? Ask your AI teacher.", "আজকের কাজ — শেষ হলেই টিক দাও। আটকে গেলে AI শিক্ষককে জিজ্ঞেস করো।")} />
+      {loaded && profile ? (
+        <section aria-label={pick(lang, "Your learning style", "তোমার শেখার ধরন")} className={`${CARD} mb-4 flex flex-wrap items-end gap-3 p-4`}>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-[1.02rem] font-bold text-ink">{pick(lang, "Homework made for you", "তোমার জন্য তৈরি হোমওয়ার্ক")}</h2>
+            <p className="text-[0.85rem] text-ink-muted">{pick(lang, "New tasks are shaped by how you like to learn. Change anytime.", "নতুন কাজগুলো তোমার পছন্দমতো সাজানো হয়। যেকোনো সময় বদলাও।")}</p>
+          </div>
+          <label className="flex flex-col gap-1 text-[0.78rem] font-bold text-ink-muted">
+            {pick(lang, "I learn best…", "আমি সবচেয়ে ভালো শিখি…")}
+            <select
+              value={profile.preferredStyle}
+              onChange={(e) => updatePersona({ preferredStyle: e.target.value as LearnerProfile["preferredStyle"] })}
+              className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink"
+            >
+              <option value="step-by-step">{pick(lang, "Step by step", "ধাপে ধাপে")}</option>
+              <option value="examples-first">{pick(lang, "Examples first", "আগে উদাহরণ")}</option>
+              <option value="visual">{pick(lang, "With pictures", "ছবি দিয়ে")}</option>
+              <option value="challenge">{pick(lang, "Challenge me", "চ্যালেঞ্জ দাও")}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[0.78rem] font-bold text-ink-muted">
+            {pick(lang, "My pace…", "আমার গতি…")}
+            <select
+              value={profile.pace}
+              onChange={(e) => updatePersona({ pace: e.target.value as LearnerProfile["pace"] })}
+              className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink"
+            >
+              <option value="slow">{pick(lang, "Slow & steady", "ধীরে ধীরে")}</option>
+              <option value="steady">{pick(lang, "Steady", "নিয়মিত")}</option>
+              <option value="fast">{pick(lang, "Fast", "দ্রুত")}</option>
+            </select>
+          </label>
+        </section>
+      ) : null}
+      {loaded && subjects.length > 1 ? (
+        <div role="group" aria-label={pick(lang, "Filter by subject", "বিষয় অনুযায়ী দেখো")} className="mb-4 flex flex-wrap gap-2">
+          {["all", ...subjects.map(([id]) => id)].map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={subjectFilter === id}
+              onClick={() => setSubjectFilter(id)}
+              className={`rounded-full border-2 border-ink px-3.5 py-1.5 text-sm font-bold transition-colors ${subjectFilter === id ? "bg-ink text-paper" : "bg-white text-ink hover:bg-paper"}`}
+            >
+              {id === "all" ? pick(lang, "All subjects", "সব বিষয়") : subjects.find(([s]) => s === id)?.[1]}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {loaded && stats.total > 0 ? (
         <div className="mb-4 flex flex-col gap-2">
           <p className="text-sm font-semibold text-ink-soft">
