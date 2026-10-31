@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   HomeworkAssignmentSchema,
+  WEEKLY_GOAL_POINTS,
   completionStats,
   dueAtForBucket,
   dueSoonCount,
@@ -9,11 +10,16 @@ import {
   isOverdue,
   markDone,
   migrateLegacyDoneFlags,
+  nextOccurrence,
+  overdueCount,
+  pointsFor,
+  pointsThisWeek,
   sortForDisplay,
   starterAssignments,
   taskProgress,
   toBnDigits,
   toggleTask,
+  totalPoints,
 } from "./engine";
 
 const NOW = new Date("2026-08-04T10:00:00"); // a Tuesday
@@ -150,6 +156,64 @@ describe("homework checklists, weekend, and review generation", () => {
     const parsed = HomeworkAssignmentSchema.parse(legacyShape);
     expect(parsed.tasks).toEqual([]);
     expect(parsed.estMinutes).toBe(10);
+  });
+});
+
+describe("homework recurrence, points, and richer tasks", () => {
+  it("spawns the next occurrence only for completed recurring work", () => {
+    const daily = generateHomeworkFromTopic({ classLevel: 6, topicId: "math-area", dueBucket: "tonight", source: "custom", now: NOW, recurrence: "daily" });
+    expect(nextOccurrence(daily, NOW)).toBeNull(); // not done yet
+    const doneDaily = markDone(daily, true, NOW);
+    const next = nextOccurrence(doneDaily, NOW);
+    expect(next).not.toBeNull();
+    expect(next!.status).toBe("assigned");
+    expect(next!.tasks.every((t) => !t.done)).toBe(true);
+    expect(new Date(next!.dueAt).getDate()).toBe(new Date(doneDaily.dueAt).getDate() + 1);
+    expect(next!.id).not.toBe(daily.id);
+
+    const weekly = generateHomeworkFromTopic({ classLevel: 6, topicId: "math-area", dueBucket: "tonight", source: "custom", now: NOW, recurrence: "weekly" });
+    const nextWeek = nextOccurrence(markDone(weekly, true, NOW), NOW)!;
+    expect(Math.round((+new Date(nextWeek.dueAt) - +new Date(weekly.dueAt)) / 86400000)).toBe(7);
+
+    const once = generateHomeworkFromTopic({ classLevel: 6, topicId: "math-area", dueBucket: "tonight", source: "custom", now: NOW });
+    expect(nextOccurrence(markDone(once, true, NOW), NOW)).toBeNull();
+  });
+
+  it("awards points per ticked step and tracks the weekly goal", () => {
+    let hw = generateHomeworkFromTopic({ classLevel: 6, topicId: "sci-plants", dueBucket: "tonight", source: "custom", now: NOW });
+    expect(pointsFor(hw)).toBe(0);
+    hw = toggleTask(hw, 0, NOW);
+    expect(pointsFor(hw)).toBe(5);
+    for (let i = 1; i < hw.tasks.length; i += 1) hw = toggleTask(hw, i, NOW);
+    expect(pointsFor(hw)).toBe(hw.tasks.length * 5);
+    expect(totalPoints([hw])).toBe(pointsFor(hw));
+    expect(pointsThisWeek([hw], NOW)).toBe(pointsFor(hw)); // completed today
+    expect(pointsThisWeek([hw], new Date("2026-09-01T10:00:00"))).toBe(0); // another week
+    expect(WEEKLY_GOAL_POINTS).toBeGreaterThan(0);
+
+    const overdue = generateHomeworkFromTopic({ classLevel: 6, topicId: "math-factors", dueBucket: "tonight", source: "custom", now: new Date("2026-08-01T10:00:00") });
+    expect(overdueCount([hw, overdue], NOW)).toBe(1);
+  });
+
+  it("writes richer, topic-specific tasks for non-math subjects", () => {
+    for (const topicId of ["sci-plants", "sci-animals", "sci-light", "en-tense", "en-speech", "bn-parts", "bgs-liberation", "ict-parts", "ict-safety"]) {
+      const hw = generateHomeworkFromTopic({ classLevel: 6, topicId, dueBucket: "tomorrow", source: "custom", now: NOW });
+      expect(hw.tasks.length).toBeGreaterThanOrEqual(3);
+      expect(hw.tasks.every((t) => t.text.length > 5 && t.textBn.length > 5)).toBe(true);
+      // Richer than the generic key-term fallback:
+      expect(hw.tasks.some((t) => /Draw|diagram|timeline|password|label/i.test(t.text) || /লেখো|আঁকো/.test(t.textBn))).toBe(true);
+    }
+  });
+
+  it("defaults recurrence to none for previously stored shapes", () => {
+    const parsed = HomeworkAssignmentSchema.parse({
+      id: "hw-x", title: "T", titleBn: "T", subjectId: "math", subjectTitle: "Mathematics",
+      topicId: "c6-math-area", topicTitle: "Area", instructions: "Do it", instructionsBn: "করো",
+      source: "custom", dueBucket: "tonight", dueAt: NOW.toISOString(), status: "assigned",
+      createdAt: NOW.toISOString(), completedAt: null,
+    });
+    expect(parsed.recurrence).toBe("none");
+    expect(parsed.tasks).toEqual([]);
   });
 });
 

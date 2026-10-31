@@ -33,6 +33,8 @@ export const HomeworkAssignmentSchema = z.object({
   tasks: z.array(HomeworkTaskSchema).default([]),
   /** Rough effort estimate shown on the card. */
   estMinutes: z.number().int().positive().default(10),
+  /** Repeating work (e.g. daily reading) spawns its next occurrence on completion. */
+  recurrence: z.enum(["none", "daily", "weekly"]).default("none"),
   source: z.enum(["starter", "lesson", "custom", "practice"]),
   dueBucket: DueBucketSchema,
   /** ISO timestamp the work is due by. */
@@ -230,6 +232,62 @@ function tasksFor(ctx: TopicContext, seed: string): HomeworkTask[] {
         task("Calculate the area", "ক্ষেত্রফল হিসাব করো"),
         task("Calculate the perimeter", "পরিসীমা হিসাব করো"),
       ];
+    case "sci-plants":
+      return [
+        task("Draw a leaf and label: blade, vein, stalk", "একটি পাতা এঁকে ব্লেড, শিরা ও বোঁটা চিহ্নিত করো"),
+        task("Write how the leaf makes food (use: sunlight, water, air)", "পাতা কীভাবে খাবার তৈরি করে লেখো (সূর্যের আলো, পানি, বাতাস ব্যবহার করো)"),
+        task("Find one plant near home and note its leaf shape", "বাড়ির কাছে একটি গাছ দেখে পাতার আকার লিখে রাখো"),
+      ];
+    case "sci-animals":
+      return [
+        task("List the digestion stages in order: ingestion → digestion → absorption → egestion", "পরিপাকের ধাপগুলো ক্রমে লেখো: গ্রহণ → পরিপাক → শোষণ → বর্জন"),
+        task("Write one line on what happens at each stage", "প্রতিটি ধাপে কী হয়, এক লাইন করে লেখো"),
+        task("Give one example food and trace its journey", "একটি খাবারের উদাহরণ দিয়ে তার যাত্রা বর্ণনা করো"),
+      ];
+    case "sci-light":
+      return [
+        task("Draw a ray diagram: mirror, incoming ray, reflected ray", "রশ্মি চিত্র আঁকো: দর্পণ, আপতিত রশ্মি, প্রতিফলিত রশ্মি"),
+        task("Label the normal and both angles", "অভিলম্ব ও দুটি কোণ চিহ্নিত করো"),
+        task("Write the two laws of reflection from memory", "মনে করে প্রতিফলনের দুটি সূত্র লেখো"),
+      ];
+    case "en-tense":
+      return [
+        task("Write 3 sentences about yesterday (past tense)", "গতকাল নিয়ে ৩টি বাক্য লেখো (past tense)"),
+        task("Write 3 sentences about now (present tense)", "এখন নিয়ে ৩টি বাক্য লেখো (present tense)"),
+        task("Underline every verb", "প্রতিটি verb-এর নিচে দাগ দাও"),
+        task("Read all 6 sentences aloud", "৬টি বাক্যই জোরে পড়ো"),
+      ];
+    case "en-speech":
+      return [
+        task("Write 3 sentences of your own", "নিজে ৩টি বাক্য লেখো"),
+        task("Label the noun, verb and adjective in each", "প্রতিটিতে noun, verb ও adjective চিহ্নিত করো"),
+        task("Add one adverb to each sentence", "প্রতিটি বাক্যে একটি করে adverb যোগ করো"),
+      ];
+    case "bn-parts":
+      return [
+        task("Write 3 Bangla sentences", "বাংলায় ৩টি বাক্য লেখো"),
+        task("Label বিশেষ্য, সর্বনাম, ক্রিয়া in each", "প্রতিটিতে বিশেষ্য, সর্বনাম, ক্রিয়া চিহ্নিত করো"),
+        task("Write one more sentence with an adjective (বিশেষণ)", "বিশেষণ দিয়ে আরও একটি বাক্য লেখো"),
+      ];
+    case "bgs-liberation":
+    case "bgs-language":
+      return [
+        task("Make a timeline of 4 key events with years", "৪টি মূল ঘটনার সালসহ টাইমলাইন বানাও"),
+        task("Write 2 lines on why the most important event matters", "সবচেয়ে গুরুত্বপূর্ণ ঘটনাটি কেন জরুরি, ২ লাইনে লেখো"),
+        task("Tell the timeline aloud to someone at home", "বাড়ির কাউকে টাইমলাইনটি শুনিয়ে দাও"),
+      ];
+    case "ict-parts":
+      return [
+        task("Draw a computer and label: monitor, CPU, keyboard, mouse", "কম্পিউটার এঁকে মনিটর, CPU, কীবোর্ড, মাউস চিহ্নিত করো"),
+        task("Sort your labels into input and output", "লেবেলগুলো input ও output-এ ভাগ করো"),
+        task("Write one line: what does the CPU do?", "এক লাইনে লেখো: CPU কী করে?"),
+      ];
+    case "ict-safety":
+      return [
+        task("Write 3 rules for a strong password", "শক্তিশালী পাসওয়ার্ডের ৩টি নিয়ম লেখো"),
+        task("Invent (but do NOT share) one strong password pattern", "একটি শক্তিশালী পাসওয়ার্ডের ধরন ভাবো (কাউকে বলবে না)"),
+        task("List 2 things you will never share online", "অনলাইনে কখনো শেয়ার করবে না, এমন ২টি জিনিস লেখো"),
+      ];
     default: {
       const terms = t.keyTerms.filter(Boolean).slice(0, 4);
       if (terms.length >= 2) {
@@ -289,6 +347,7 @@ export interface GenerateArgs {
   dueBucket: DueBucket;
   source: HomeworkAssignment["source"];
   now: Date;
+  recurrence?: HomeworkAssignment["recurrence"];
 }
 
 export function generateHomeworkFromTopic(args: GenerateArgs): HomeworkAssignment {
@@ -317,6 +376,7 @@ export function generateHomeworkFromTopic(args: GenerateArgs): HomeworkAssignmen
     instructionsBn: bn,
     tasks,
     estMinutes: estimateMinutes(tasks),
+    recurrence: args.recurrence ?? "none",
     source: args.source,
     dueBucket: args.dueBucket,
     dueAt: dueAtForBucket(args.dueBucket, args.now).toISOString(),
@@ -402,6 +462,63 @@ export function migrateLegacyDoneFlags(
   return starters.map((a, i) =>
     flags[i] ? { ...a, status: "done" as const, completedAt: now.toISOString() } : a,
   );
+}
+
+/* ---------------- recurrence & points ---------------- */
+
+/**
+ * The next occurrence of a recurring assignment, spawned when the
+ * current one is completed: same work, fresh checklist, due one
+ * day (daily) or one week (weekly) after the current due time.
+ */
+export function nextOccurrence(a: HomeworkAssignment, now: Date = new Date()): HomeworkAssignment | null {
+  if (a.recurrence === "none" || a.status !== "done") return null;
+  const due = new Date(a.dueAt);
+  due.setDate(due.getDate() + (a.recurrence === "daily" ? 1 : 7));
+  return {
+    ...a,
+    id: newHomeworkId(now),
+    tasks: a.tasks.map((t) => ({ ...t, done: false })),
+    status: "assigned",
+    createdAt: now.toISOString(),
+    completedAt: null,
+    dueAt: due.toISOString(),
+  };
+}
+
+export const POINTS_PER_TASK = 5;
+export const POINTS_PER_ASSIGNMENT = 10;
+export const WEEKLY_GOAL_POINTS = 100;
+
+/** Effort points earned: ticked steps now, full set on completion. */
+export function pointsFor(a: HomeworkAssignment): number {
+  if (a.tasks.length > 0) return a.tasks.filter((t) => t.done).length * POINTS_PER_TASK;
+  return a.status === "done" ? POINTS_PER_ASSIGNMENT : 0;
+}
+
+export function totalPoints(list: HomeworkAssignment[]): number {
+  return list.reduce((sum, a) => sum + pointsFor(a), 0);
+}
+
+/** Points from assignments completed within the current Mon–Sun week. */
+export function pointsThisWeek(list: HomeworkAssignment[], now: Date): number {
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const nextMonday = new Date(monday);
+  nextMonday.setDate(nextMonday.getDate() + 7);
+  return list
+    .filter((a) => {
+      if (!a.completedAt) return false;
+      const at = new Date(a.completedAt).getTime();
+      return at >= monday.getTime() && at < nextMonday.getTime();
+    })
+    .reduce((sum, a) => sum + pointsFor(a), 0);
+}
+
+/** Overdue pending assignments — drives reminder nudges. */
+export function overdueCount(list: HomeworkAssignment[], now: Date): number {
+  return list.filter((a) => isOverdue(a, now)).length;
 }
 
 export function markDone(

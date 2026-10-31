@@ -6,14 +6,16 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang, type Lang } from "../../lib/i18n";
 import { EDUCATION_LABEL, getProfile } from "../../lib/profile";
-import { GAMES, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { GAMES, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
 import { adaptLearner, recordAnswer, type LearnerProfile } from "../../lib/learner/adapt";
 import { loadLearner, saveLearner } from "../../lib/learner/store";
 import { getClass } from "../../lib/nctb/catalog";
 import {
   PRACTICE_SET_SIZE,
   buildAdaptivePracticeSet,
+  buildBookmarkSet,
   buildMixedPracticeSet,
+  buildRetrySet,
   buildReviewPracticeSet,
   gradePracticeSet,
   isCorrectAnswer,
@@ -22,16 +24,27 @@ import {
   type PracticeResult,
   type PracticeSet,
 } from "../../lib/practice/engine";
-import { appendPracticeResult, loadPracticeResults } from "../../lib/practice/store";
 import {
+  appendPracticeResult,
+  loadBookmarks,
+  loadPracticeResults,
+  toggleBookmark,
+  type Bookmark,
+} from "../../lib/practice/store";
+import {
+  WEEKLY_GOAL_POINTS,
   completionStats,
   dueAtForBucket,
   dueSoonCount,
   generateHomeworkFromTopic,
   generateReviewHomework,
   markDone,
+  nextOccurrence,
+  overdueCount,
+  pointsThisWeek,
   taskProgress,
   toggleTask,
+  totalPoints,
   type DueBucket,
   type HomeworkAssignment,
 } from "../../lib/homework/engine";
@@ -107,9 +120,13 @@ function HomeView() {
   const { lang } = useLang();
   const { name, edu } = useName();
   const [hwDue, setHwDue] = useState(0);
+  const [hwOverdue, setHwOverdue] = useState(0);
   useEffect(() => {
     const id = requestAnimationFrame(() => {
-      setHwDue(dueSoonCount(loadAssignments(loadLearner().classLevel), new Date()));
+      const assignments = loadAssignments(loadLearner().classLevel);
+      const now = new Date();
+      setHwDue(dueSoonCount(assignments, now));
+      setHwOverdue(overdueCount(assignments, now));
     });
     return () => cancelAnimationFrame(id);
   }, []);
@@ -169,6 +186,9 @@ function HomeView() {
           <h2 className="flex items-center gap-2 text-[1rem] text-ink"><Icon name="flame" className="size-5 text-ember" strokeWidth={1.8} />{pick(lang, "Today", "আজ")}</h2>
           <ul className="mt-3 flex flex-col gap-2 text-sm">
             <li><Link href="/dashboard/homework" className="flex justify-between gap-2 rounded-lg bg-marigold-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Homework due", "হোমওয়ার্ক বাকি")}</span><span>{hwDue}</span></Link></li>
+            {hwOverdue > 0 ? (
+              <li><Link href="/dashboard/homework" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-shapla-ink"><span>{pick(lang, "Overdue — finish first", "দেরি হয়ে গেছে — আগে এগুলো")}</span><span>{hwOverdue}</span></Link></li>
+            ) : null}
             <li><Link href="/dashboard/revision" className="flex justify-between gap-2 rounded-lg bg-lagoon-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Revision cards", "রিভিশন কার্ড")}</span><span>8</span></Link></li>
             <li><Link href="/dashboard/practice" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Practice questions", "অনুশীলন প্রশ্ন")}</span><span>{PRACTICE_SET_SIZE}</span></Link></li>
           </ul>
@@ -202,6 +222,7 @@ function PracticeView() {
   const { lang } = useLang();
   const [learner, setLearner] = useState<LearnerProfile | null>(null);
   const [results, setResults] = useState<PracticeResult[]>([]);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [topicId, setTopicId] = useState<string | null>(null);
   const [set, setSet] = useState<PracticeSet | null>(null);
   const [idx, setIdx] = useState(0);
@@ -217,6 +238,7 @@ function PracticeView() {
     const id = requestAnimationFrame(() => {
       setLearner(loadLearner());
       setResults(loadPracticeResults());
+      setBookmarks(loadBookmarks());
     });
     return () => cancelAnimationFrame(id);
   }, []);
@@ -258,6 +280,23 @@ function PracticeView() {
     if (!learner) return;
     const review = buildReviewPracticeSet(learner, results);
     if (review) beginSet(review, "review");
+  }
+
+  function startBookmarks() {
+    if (!learner) return;
+    const bookmarkSet = buildBookmarkSet(learner, bookmarks.map((b) => b.question));
+    if (bookmarkSet) beginSet(bookmarkSet, "bookmarks");
+  }
+
+  function startRetry() {
+    if (!set) return;
+    const retry = buildRetrySet(set, picks);
+    if (retry) beginSet(retry, "retry");
+  }
+
+  function onToggleBookmark() {
+    if (!q) return;
+    setBookmarks((current) => toggleBookmark(current, q));
   }
 
   function choose(pick: number | string) {
@@ -345,6 +384,11 @@ function PracticeView() {
           {set.topicId !== "mixed" && set.topicId !== "review" ? (
             <button type="button" className={BTN_SM} onClick={() => startSet(set.topicId)}>{pick(lang, "Practice again", "আবার অনুশীলন করো")}</button>
           ) : null}
+          {graded.score < set.questions.length ? (
+            <button type="button" className={BTN_SM} onClick={startRetry}>
+              <Icon name="refresh" className="size-4" strokeWidth={2} />{pick(lang, `Retry the ${set.questions.length - graded.score} wrong ones`, `ভুল ${set.questions.length - graded.score}টি আবার করো`)}
+            </button>
+          ) : null}
           {graded.score < set.questions.length && !hwAdded ? (
             <button type="button" className={BTN_SM} onClick={addReviewHomework}>
               <Icon name="notes" className="size-4" strokeWidth={2} />{pick(lang, "Add review homework", "রিভিশন হোমওয়ার্ক যোগ করো")}
@@ -390,6 +434,15 @@ function PracticeView() {
                 </span>
               </button>
             ) : null}
+            {bookmarks.length > 0 ? (
+              <button type="button" onClick={startBookmarks} className="flex items-center gap-3 rounded-xl border-2 border-ink bg-marigold-soft px-4 py-3 text-left transition-colors hover:bg-white">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-ember-ink"><Icon name="heart" className="size-4.5" strokeWidth={1.9} /></span>
+                <span>
+                  <span className="block font-display text-[0.95rem] font-bold text-ink">{pick(lang, "My Bookmarks", "আমার বুকমার্ক")}</span>
+                  <span className="block text-[0.8rem] text-ink-muted">{pick(lang, `${bookmarks.length} saved question(s) to redo.`, `${bookmarks.length}টি সেভ করা প্রশ্ন আবার করার জন্য।`)}</span>
+                </span>
+              </button>
+            ) : null}
           </div>
           <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {topicOptions.map(({ subject, topic }) => (
@@ -416,7 +469,19 @@ function PracticeView() {
       <section className={`${CARD} mx-auto max-w-2xl p-5`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[0.8rem] font-bold text-ink-muted">{pick(lang, `Question ${idx + 1} of ${set.questions.length}`, `প্রশ্ন ${idx + 1} / ${set.questions.length}`)} · {pick(lang, "Score", "স্কোর")}: {score}</p>
-          <span className="rounded-full bg-marigold-soft px-2.5 py-0.5 text-[0.72rem] font-bold text-ink">{set.topicTitle} · {DIFF_LABEL(lang, set.difficulty)}</span>
+          <span className="flex items-center gap-2">
+            <span className="rounded-full bg-marigold-soft px-2.5 py-0.5 text-[0.72rem] font-bold text-ink">{set.topicTitle} · {DIFF_LABEL(lang, set.difficulty)}</span>
+            <button
+              type="button"
+              aria-pressed={bookmarks.some((b) => b.question.id === q.id)}
+              aria-label={pick(lang, "Save this question", "এই প্রশ্নটি সেভ করো")}
+              title={pick(lang, "Save this question", "এই প্রশ্নটি সেভ করো")}
+              onClick={onToggleBookmark}
+              className={`grid size-8 place-items-center rounded-full border-2 border-ink transition-colors ${bookmarks.some((b) => b.question.id === q.id) ? "bg-flame text-night" : "bg-white text-ink"}`}
+            >
+              <Icon name="heart" className="size-4" strokeWidth={2} />
+            </button>
+          </span>
         </div>
         <div aria-hidden="true" className="mt-3 h-2 overflow-hidden rounded-full border border-ink/20 bg-paper">
           <div className="h-full bg-brand-500 transition-all" style={{ width: `${((idx + (picked !== null ? 1 : 0)) / set.questions.length) * 100}%` }} />
@@ -496,8 +561,10 @@ function HomeworkView() {
   const [loaded, setLoaded] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBucket, setNewBucket] = useState<DueBucket>("tomorrow");
+  const [newRecurrence, setNewRecurrence] = useState<HomeworkAssignment["recurrence"]>("none");
   const [topicPick, setTopicPick] = useState("");
   const [topicBucket, setTopicBucket] = useState<DueBucket>("tonight");
+  const [topicRecurrence, setTopicRecurrence] = useState<HomeworkAssignment["recurrence"]>("none");
 
   useEffect(() => {
     const id = requestAnimationFrame(() => {
@@ -526,20 +593,24 @@ function HomeworkView() {
       s.chapters.flatMap((c) => c.topics.map((tp) => ({ subject: s, topic: tp }))),
     ) ?? [];
 
-  function toggleDone(a: HomeworkAssignment) {
+  /** Applies an update; completing a recurring assignment spawns its next occurrence. */
+  function applyUpdate(a: HomeworkAssignment, updated: HomeworkAssignment) {
     setList((current) => {
-      const next = current.map((x) => (x.id === a.id ? markDone(x, x.status !== "done") : x));
-      saveAssignments(next);
-      return next;
+      const next = current.map((x) => (x.id === a.id ? updated : x));
+      const spawned =
+        a.status !== "done" && updated.status === "done" ? nextOccurrence(updated) : null;
+      const withNext = spawned ? [spawned, ...next] : next;
+      saveAssignments(withNext);
+      return withNext;
     });
   }
 
+  function toggleDone(a: HomeworkAssignment) {
+    applyUpdate(a, markDone(a, a.status !== "done"));
+  }
+
   function toggleStep(a: HomeworkAssignment, stepIndex: number) {
-    setList((current) => {
-      const next = current.map((x) => (x.id === a.id ? toggleTask(x, stepIndex) : x));
-      saveAssignments(next);
-      return next;
-    });
+    applyUpdate(a, toggleTask(a, stepIndex));
   }
 
   function addReviewFromMistakes() {
@@ -572,6 +643,7 @@ function HomeworkView() {
       instructionsBn: title,
       tasks: [],
       estMinutes: 10,
+      recurrence: newRecurrence,
       source: "custom",
       dueBucket: newBucket,
       dueAt: dueAtForBucket(newBucket, new Date()).toISOString(),
@@ -591,6 +663,7 @@ function HomeworkView() {
       dueBucket: topicBucket,
       source: "custom",
       now: new Date(),
+      recurrence: topicRecurrence,
     });
     setList((current) => addAssignment(current, assignment));
     setTopicPick("");
@@ -632,6 +705,12 @@ function HomeworkView() {
         <span>{dueLabel(lang, a)}</span>
         <span aria-hidden="true">·</span>
         <span className="inline-flex items-center gap-1"><Icon name="clock" className="size-3.5" strokeWidth={2} />{pick(lang, `~${a.estMinutes} min`, `~${a.estMinutes} মিনিট`)}</span>
+        {a.recurrence !== "none" ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <span className="inline-flex items-center gap-1"><Icon name="refresh" className="size-3.5" strokeWidth={2} />{a.recurrence === "daily" ? pick(lang, "Repeats daily", "প্রতিদিন আবার") : pick(lang, "Repeats weekly", "প্রতি সপ্তাহে আবার")}</span>
+          </>
+        ) : null}
       </p>
       <div className="mt-auto flex flex-wrap gap-2 pt-1">
         <button type="button" aria-pressed={a.status === "done"} onClick={() => toggleDone(a)} className={BTN_SM}>
@@ -648,9 +727,25 @@ function HomeworkView() {
     <div className="mx-auto max-w-[84rem]">
       <PageHead title={pick(lang, "Homework", "হোমওয়ার্ক")} sub={pick(lang, "Tonight's work — tick each one off as you finish. Stuck? Ask your AI teacher.", "আজকের কাজ — শেষ হলেই টিক দাও। আটকে গেলে AI শিক্ষককে জিজ্ঞেস করো।")} />
       {loaded && stats.total > 0 ? (
-        <p className="mb-3 text-sm font-semibold text-ink-soft">
-          {pick(lang, `${stats.done} of ${stats.total} done (${stats.rate}%).`, `${stats.total}টির মধ্যে ${stats.done}টি শেষ (${stats.rate}%)।`)}
-        </p>
+        <div className="mb-4 flex flex-col gap-2">
+          <p className="text-sm font-semibold text-ink-soft">
+            {pick(lang, `${stats.done} of ${stats.total} done (${stats.rate}%).`, `${stats.total}টির মধ্যে ${stats.done}টি শেষ (${stats.rate}%)।`)}
+            {" · "}
+            {pick(lang, `${totalPoints(list)} points in total.`, `মোট ${totalPoints(list)} পয়েন্ট।`)}
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-[0.8rem] font-bold text-ink-muted">{pick(lang, "This week's goal", "এই সপ্তাহের লক্ষ্য")}</span>
+            <div aria-hidden="true" className="h-2.5 flex-1 overflow-hidden rounded-full border border-ink/20 bg-paper">
+              <div className="h-full bg-brand-500 transition-all" style={{ width: `${Math.min(100, (pointsThisWeek(list, new Date()) / WEEKLY_GOAL_POINTS) * 100)}%` }} />
+            </div>
+            <span className="text-[0.8rem] font-bold text-ink">{pointsThisWeek(list, new Date())}/{WEEKLY_GOAL_POINTS} {pick(lang, "pts", "পয়েন্ট")}</span>
+          </div>
+          {overdueCount(list, new Date()) > 0 ? (
+            <p role="status" className="rounded-xl border border-coral/40 bg-coral-soft px-3 py-2 text-sm font-semibold text-shapla-ink">
+              {pick(lang, `Reminder: ${overdueCount(list, new Date())} assignment(s) are overdue — finish those first.`, `মনে করিয়ে দিই: ${overdueCount(list, new Date())}টি হোমওয়ার্ক দেরি হয়ে গেছে — সেগুলো আগে শেষ করো।`)}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {overdue.length > 0 ? (
@@ -700,6 +795,11 @@ function HomeworkView() {
                 <option value="friday">{pick(lang, "Friday", "শুক্রবার")}</option>
                 <option value="weekend">{pick(lang, "Weekend", "সাপ্তাহিক ছুটি")}</option>
               </select>
+              <select aria-label={pick(lang, "Repeat", "আবার হবে")} value={topicRecurrence} onChange={(e) => setTopicRecurrence(e.target.value as HomeworkAssignment["recurrence"])} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+                <option value="none">{pick(lang, "Once", "একবার")}</option>
+                <option value="daily">{pick(lang, "Daily", "প্রতিদিন")}</option>
+                <option value="weekly">{pick(lang, "Weekly", "প্রতি সপ্তাহে")}</option>
+              </select>
               <button type="button" disabled={!topicPick} onClick={addFromTopic} className={`${BTN_SM} disabled:cursor-not-allowed disabled:opacity-50`}>
                 <Icon name="notes" className="size-4" strokeWidth={2} />{pick(lang, "Add homework", "হোমওয়ার্ক যোগ করো")}
               </button>
@@ -724,6 +824,11 @@ function HomeworkView() {
                 <option value="tomorrow">{pick(lang, "Tomorrow", "আগামীকাল")}</option>
                 <option value="friday">{pick(lang, "Friday", "শুক্রবার")}</option>
                 <option value="weekend">{pick(lang, "Weekend", "সাপ্তাহিক ছুটি")}</option>
+              </select>
+              <select aria-label={pick(lang, "Repeat", "আবার হবে")} value={newRecurrence} onChange={(e) => setNewRecurrence(e.target.value as HomeworkAssignment["recurrence"])} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+                <option value="none">{pick(lang, "Once", "একবার")}</option>
+                <option value="daily">{pick(lang, "Daily", "প্রতিদিন")}</option>
+                <option value="weekly">{pick(lang, "Weekly", "প্রতি সপ্তাহে")}</option>
               </select>
               <button type="button" disabled={!newTitle.trim()} onClick={addCustom} className={`${BTN_SM} disabled:cursor-not-allowed disabled:opacity-50`}>
                 <Icon name="check" className="size-4" strokeWidth={2.2} />{pick(lang, "Add", "যোগ করো")}

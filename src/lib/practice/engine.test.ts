@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAdaptivePracticeSet,
+  buildBookmarkSet,
   buildMixedPracticeSet,
   buildPracticeSet,
+  buildRetrySet,
   buildReviewPracticeSet,
   gradePracticeSet,
   isCorrectAnswer,
@@ -57,11 +59,21 @@ describe("practice engine", () => {
   });
 
   it("difficulty widens the generated number ranges", () => {
-    const easy = buildPracticeSet(6, "math-factors", 1, 5, 0);
-    const hard = buildPracticeSet(6, "math-factors", 3, 5, 0);
-    const maxNum = (qs: typeof easy.questions) =>
-      Math.max(...qs.flatMap((q) => q.question.match(/\d+/g)?.map(Number) ?? []));
-    expect(maxNum(hard.questions)).toBeGreaterThan(maxNum(easy.questions));
+    const lcmOperands = (difficulty: 1 | 3): number[] => {
+      const out: number[] = [];
+      for (let v = 0; v < 8; v += 1) {
+        for (const q of buildPracticeSet(6, "math-factors", difficulty, 5, v).questions) {
+          const m = /LCM of (\d+) and (\d+)/.exec(q.question);
+          if (m) out.push(Number(m[1]), Number(m[2]));
+        }
+      }
+      return out;
+    };
+    const easy = lcmOperands(1);
+    const hard = lcmOperands(3);
+    expect(easy.length).toBeGreaterThan(0);
+    expect(Math.max(...easy)).toBeLessThanOrEqual(12);
+    expect(Math.max(...hard)).toBeGreaterThan(24);
   });
 
   it("grades picks against answer indices", () => {
@@ -153,6 +165,63 @@ describe("practice engine", () => {
       { id: "r2", setId: "s2", classLevel: 6, topicId: "c6-math-factors", difficulty: 2, total: 5, correct: 5, finishedAt: "2026-01-02T00:00:00Z" },
     ]);
     expect(byAccuracy!.questions[0]!.topicId).toBe("c6-math-area");
+  });
+
+  it("rotates in the new templates (percent, mean, word problems, simplification)", () => {
+    const kinds = new Set<string>();
+    for (let v = 0; v < 6; v += 1) {
+      for (const topicId of ["math-factors", "math-fractions", "math-algebraic", "math-equations", "math-angles", "math-area"]) {
+        for (const q of buildPracticeSet(6, topicId, 2, 5, v).questions) kinds.add(q.kind);
+      }
+    }
+    for (const kind of ["percent", "mean", "word-problem", "simplify", "fraction-subtract"]) {
+      expect(kinds.has(kind)).toBe(true);
+    }
+  });
+
+  it("computes correct answers for the new templates", () => {
+    for (let v = 0; v < 4; v += 1) {
+      const percent = buildPracticeSet(6, "math-area", 2, 5, v).questions.filter((q) => q.kind === "percent");
+      for (const q of percent) {
+        const m = /What is (\d+)% of (\d+)\?/.exec(q.question)!;
+        expect(Number(q.answer)).toBe((Number(m[1]) * Number(m[2])) / 100);
+      }
+      const means = buildPracticeSet(6, "math-angles", 2, 5, v).questions.filter((q) => q.kind === "mean");
+      for (const q of means) {
+        const nums = q.question.match(/\d+/g)!.map(Number);
+        expect((nums[0]! + nums[1]! + nums[2]!) / 3).toBe(Number(q.answer));
+      }
+    }
+  });
+
+  it("builds retry sets with exactly the missed questions", () => {
+    const set = buildPracticeSet(6, "math-equations", 2, 5, 0);
+    const picks = set.questions.map((q, i) =>
+      i < 3 ? (q.format === "numeric" ? q.answer : q.answerIndex) : q.format === "numeric" ? "999999" : (q.answerIndex + 1) % q.options.length,
+    );
+    const retry = buildRetrySet(set, picks);
+    expect(retry).not.toBeNull();
+    expect(retry!.topicId).toBe("retry");
+    expect(retry!.questions).toHaveLength(2);
+    expect(retry!.questions.map((q) => q.question)).toEqual(
+      set.questions.slice(3).map((q) => q.question),
+    );
+    const perfect = buildRetrySet(
+      set,
+      set.questions.map((q) => (q.format === "numeric" ? q.answer : q.answerIndex)),
+    );
+    expect(perfect).toBeNull();
+  });
+
+  it("builds bookmark sets from saved questions (capped at 10)", () => {
+    const learner = defaultLearner("Rafi");
+    expect(buildBookmarkSet(learner, [])).toBeNull();
+    const source = buildPracticeSet(6, "math-factors", 2, 5, 0);
+    const set = buildBookmarkSet(learner, source.questions);
+    expect(set!.topicId).toBe("bookmarks");
+    expect(set!.questions.map((q) => q.question)).toEqual(source.questions.map((q) => q.question));
+    const many = Array.from({ length: 14 }, () => source.questions).flat();
+    expect(buildBookmarkSet(learner, many)!.questions).toHaveLength(10);
   });
 
   it("summarizes results for the progress view", () => {

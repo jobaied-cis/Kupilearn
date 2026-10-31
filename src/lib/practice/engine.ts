@@ -295,13 +295,95 @@ function areaPerimeter(r: () => number, d: 1 | 2 | 3): Built {
     `Perimeter = 2 × (${l} + ${w}) = ${2 * (l + w)} cm.`);
 }
 
+function fractionSubtract(r: () => number, d: 1 | 2 | 3): Built {
+  const denoms = d === 1 ? [2, 3, 4] : d === 2 ? [3, 4, 5, 6] : [4, 5, 6, 8, 9];
+  const d1 = denoms[randInt(r, 0, denoms.length - 1)]!;
+  const d2 = d1 * [2, 3][randInt(r, 0, 1)]!;
+  // Work over the common denominator so the result is always positive.
+  const n1 = randInt(r, 1, d1 - 1);
+  const scaled = n1 * (d2 / d1); // exact: d2 is a multiple of d1
+  const n2 = randInt(r, 1, scaled - 1);
+  const L = d2;
+  const num = scaled - n2;
+  const g = gcd(Math.max(1, num), L);
+  const answer = `${num / g}/${L / g}`;
+  const mistakes = new Set<string>([`${n1 - n2}/${d1}`, `${num}/${L}`, `${Math.max(1, num - 1)}/${L}`]);
+  mistakes.delete(answer);
+  const pool = [answer, ...mistakes];
+  for (let k = 2; pool.length < 4; k += 1) {
+    const extra = `${num + k}/${L}`;
+    if (!pool.includes(extra)) pool.push(extra);
+  }
+  const options = shuffle(r, pool.slice(0, 4));
+  return {
+    kind: "fraction-subtract",
+    format: "mcq",
+    question: `What is ${n1}/${d1} − ${n2}/${d2}?`,
+    options,
+    answerIndex: options.indexOf(answer),
+    answer,
+    hint: `Make the bottom ${L} first, then subtract only the tops.`,
+    explanation: `${n1}/${d1} − ${n2}/${d2} = ${num}/${L} = ${answer} in simplest form.`,
+  };
+}
+
+function percentOf(r: () => number, d: 1 | 2 | 3): Built {
+  const p = [10, 20, 25, 50, 75][randInt(r, 0, 4)]!;
+  const base = d === 1 ? [40, 80, 100, 200][randInt(r, 0, 3)]! : [60, 120, 240, 300, 400][randInt(r, 0, 4)]!;
+  const answer = (base * p) / 100;
+  return numericQuestion(r, "percent", `What is ${p}% of ${base}?`, answer, d,
+    `${p}% means ${p} out of every 100. Find 1% first (${base} ÷ 100), then multiply by ${p}.`,
+    `${p}% of ${base} = ${base} ÷ 100 × ${p} = ${answer}.`);
+}
+
+function meanOf(r: () => number, d: 1 | 2 | 3): Built {
+  const mean = randInt(r, 4, d === 1 ? 15 : 30);
+  const spread = d === 1 ? 4 : 9;
+  const a = mean - randInt(r, 1, spread);
+  const b = mean + randInt(r, 0, spread);
+  const c = 3 * mean - a - b;
+  return numericQuestion(r, "mean", `What is the average (mean) of ${a}, ${b} and ${c}?`, mean, d,
+    "Add all three numbers, then share the total equally among 3.",
+    `(${a} + ${b} + ${c}) ÷ 3 = ${a + b + c} ÷ 3 = ${mean}.`);
+}
+
+function moneyWordProblem(r: () => number, d: 1 | 2 | 3): Built {
+  const price = [15, 20, 25, 40, 50][randInt(r, 0, 4)]!;
+  const count = randInt(r, 2, d === 1 ? 4 : 8);
+  const start = price * count + [10, 20, 30, 50][randInt(r, 0, 3)]!;
+  const left = start - price * count;
+  return numericQuestion(r, "word-problem",
+    `Rafi had ৳${start}. He bought ${count} exercise books at ৳${price} each. How much money is left?`,
+    left, d,
+    `First find the total cost: ${count} × ৳${price}. Then subtract it from ৳${start}.`,
+    `Cost = ${count} × ৳${price} = ৳${price * count}. Left = ৳${start} − ৳${price * count} = ৳${left}.`);
+}
+
+function simplifyExpr(r: () => number, d: 1 | 2 | 3): Built {
+  const cap = d === 1 ? 5 : d === 2 ? 9 : 12;
+  const a = randInt(r, 2, cap);
+  const b = randInt(r, 2, cap);
+  const sum = `${a + b}x`;
+  const options = shuffle(r, [sum, `${a * b}x`, `${a}x + ${b}`, `${a + b}`]);
+  return {
+    kind: "simplify",
+    format: "mcq",
+    question: `Simplify: ${a}x + ${b}x`,
+    options,
+    answerIndex: options.indexOf(sum),
+    answer: sum,
+    hint: "Terms with the same letter can be joined: count how many x there are in total.",
+    explanation: `${a}x + ${b}x has ${a} + ${b} = ${a + b} copies of x, so it is ${sum}.`,
+  };
+}
+
 const MATH_BUILDERS: Record<string, Builder[]> = {
-  "math-factors": [lcmHcf, lcmHcf, fractionAdd],
-  "math-fractions": [fractionLargest, fractionAdd, fractionLargest],
-  "math-algebraic": [evaluateExpr, evaluateExpr, solveEquation],
-  "math-equations": [solveEquation, solveEquation, evaluateExpr],
-  "math-angles": [triangleAngle, triangleAngle, areaPerimeter],
-  "math-area": [areaPerimeter, areaPerimeter, triangleAngle],
+  "math-factors": [lcmHcf, lcmHcf, fractionAdd, percentOf],
+  "math-fractions": [fractionLargest, fractionAdd, fractionLargest, fractionSubtract],
+  "math-algebraic": [evaluateExpr, evaluateExpr, solveEquation, simplifyExpr],
+  "math-equations": [solveEquation, solveEquation, evaluateExpr, moneyWordProblem],
+  "math-angles": [triangleAngle, triangleAngle, areaPerimeter, meanOf],
+  "math-area": [areaPerimeter, areaPerimeter, triangleAngle, percentOf],
 };
 
 /* ---------------- generic builders (any topic) ---------------- */
@@ -677,6 +759,41 @@ export function buildAdaptivePracticeSet(
     (r) => r.topicId === topicId || r.topicId.endsWith(`-${topicId}`),
   ).length;
   return buildPracticeSet(learner.classLevel, topicId, difficulty, PRACTICE_SET_SIZE, variant);
+}
+
+/**
+ * Retry set: exactly the questions answered wrong in a finished set —
+ * deliberate re-practice of the misses, in the same order.
+ */
+export function buildRetrySet(set: PracticeSet, picks: (number | string | null)[]): PracticeSet | null {
+  const graded = gradePracticeSet(set, picks);
+  const wrong = set.questions.filter((_, i) => !graded.correct[i]);
+  if (wrong.length === 0) return null;
+  return PracticeSetSchema.parse({
+    id: `retry|${set.id}`,
+    classLevel: set.classLevel,
+    topicId: "retry",
+    topicTitle: `Retry: ${set.topicTitle}`,
+    difficulty: set.difficulty,
+    questions: wrong.map((q, i) => ({ ...q, id: `retry|${q.id}|${i}` })),
+  });
+}
+
+/** A practice set assembled from the learner's bookmarked questions. */
+export function buildBookmarkSet(
+  learner: LearnerProfile,
+  bookmarked: PracticeQuestion[],
+): PracticeSet | null {
+  if (bookmarked.length === 0) return null;
+  const difficulty = adaptLearner(learner).difficulty;
+  return PracticeSetSchema.parse({
+    id: `bookmarks|d${difficulty}`,
+    classLevel: learner.classLevel,
+    topicId: "bookmarks",
+    topicTitle: "My Bookmarks",
+    difficulty,
+    questions: bookmarked.slice(0, 10).map((q, i) => ({ ...q, id: `bm|${q.id}|${i}` })),
+  });
 }
 
 export function gradePracticeSet(
