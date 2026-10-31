@@ -13,6 +13,8 @@ import type { StructuredLesson } from "../../lib/lesson/engine";
 import type { RetrievedPassage } from "../../lib/rag/retrieve";
 import { adaptLearner, recordAnswer } from "../../lib/learner/adapt";
 import { loadLearner, saveLearner } from "../../lib/learner/store";
+import { generateHomeworkFromTopic } from "../../lib/homework/engine";
+import { addAssignment, loadAssignments } from "../../lib/homework/store";
 import type { ClassroomTurnResponse } from "../../lib/classroom/types";
 
 type Step = "class" | "book" | "chapter" | "teacher" | "classmates" | "live" | "progress";
@@ -75,6 +77,7 @@ export function ClassroomFlow() {
   const [attempts, setAttempts] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [reteachCount, setReteachCount] = useState(0);
+  const [hwAssigned, setHwAssigned] = useState(false);
   const turnState = useRef<unknown>(null);
   const registryRef = useRef<unknown>(null);
   // Automatic live-class engine state.
@@ -434,9 +437,28 @@ export function ClassroomFlow() {
 
   function resetFlow(to: Step) {
     setStep(to);
+    setHwAssigned(false);
     if (to === "class") { setBook(null); setChapter(null); setTeacher(null); setMates([]); setLesson(null); }
     if (to === "book") { setChapter(null); setTeacher(null); setMates([]); setLesson(null); }
     if (to === "chapter") { setTeacher(null); setMates([]); setLesson(null); }
+  }
+
+  // Lesson completion → tonight's homework, generated from the lesson topic.
+  function assignLessonHomework() {
+    if (!lesson || !classLevel || hwAssigned) return;
+    try {
+      const assignment = generateHomeworkFromTopic({
+        classLevel,
+        topicId: lesson.id,
+        dueBucket: "tonight",
+        source: "lesson",
+        now: new Date(),
+      });
+      addAssignment(loadAssignments(classLevel), assignment);
+      setHwAssigned(true);
+    } catch {
+      // Topic not in the NCTB catalog (e.g. free-form lesson) — no homework.
+    }
   }
 
   return (
@@ -632,6 +654,16 @@ export function ClassroomFlow() {
           {lesson ? <p className="mt-4 rounded-xl bg-sand px-3.5 py-2.5 text-sm font-medium text-ink"><strong>Teacher summary:</strong> {lesson.summary}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/dashboard/progress" className={BTN}>View my learning progress <Icon name="arrow" className="size-4" strokeWidth={2.2} /></Link>
+            {lesson && classLevel && !hwAssigned ? (
+              <button type="button" className={BTN_GHOST} onClick={assignLessonHomework}>
+                <Icon name="notes" className="size-4" strokeWidth={2} /> Set tonight&apos;s homework
+              </button>
+            ) : null}
+            {hwAssigned ? (
+              <Link href="/dashboard/homework" className={BTN_GHOST}>
+                <Icon name="check" className="size-4" strokeWidth={2.2} /> Homework set — view it
+              </Link>
+            ) : null}
             <button type="button" className={BTN_GHOST} onClick={() => resetFlow("class")}>Start a new class</button>
             <button type="button" className={BTN_GHOST} onClick={() => resetFlow("chapter")}>Pick another chapter</button>
           </div>

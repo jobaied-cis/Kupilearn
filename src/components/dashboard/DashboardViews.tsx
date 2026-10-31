@@ -6,7 +6,36 @@ import Link from "next/link";
 import { Icon } from "../Icon";
 import { pick, useLang, type Lang } from "../../lib/i18n";
 import { EDUCATION_LABEL, getProfile } from "../../lib/profile";
-import { GAMES, HOMEWORK, PRACTICE_QS, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { GAMES, REVISION, SUBJECTS, bi, type Bi } from "../../lib/dashboard-data";
+import { adaptLearner, recordAnswer, type LearnerProfile } from "../../lib/learner/adapt";
+import { loadLearner, saveLearner } from "../../lib/learner/store";
+import { getClass } from "../../lib/nctb/catalog";
+import {
+  PRACTICE_SET_SIZE,
+  buildAdaptivePracticeSet,
+  buildMixedPracticeSet,
+  buildReviewPracticeSet,
+  gradePracticeSet,
+  isCorrectAnswer,
+  makePracticeResult,
+  summarizePractice,
+  type PracticeResult,
+  type PracticeSet,
+} from "../../lib/practice/engine";
+import { appendPracticeResult, loadPracticeResults } from "../../lib/practice/store";
+import {
+  completionStats,
+  dueAtForBucket,
+  dueSoonCount,
+  generateHomeworkFromTopic,
+  generateReviewHomework,
+  markDone,
+  taskProgress,
+  toggleTask,
+  type DueBucket,
+  type HomeworkAssignment,
+} from "../../lib/homework/engine";
+import { addAssignment, loadAssignments, saveAssignments } from "../../lib/homework/store";
 import type { DashSection } from "./DashboardShell";
 import { ClassroomFlow } from "../classroom/ClassroomFlow";
 
@@ -76,6 +105,13 @@ function SubjectsGrid() {
 function HomeView() {
   const { lang } = useLang();
   const { name, edu } = useName();
+  const [hwDue, setHwDue] = useState(0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setHwDue(dueSoonCount(loadAssignments(loadLearner().classLevel), new Date()));
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
   const eduLabel = edu ? pick(lang, EDUCATION_LABEL[edu as keyof typeof EDUCATION_LABEL].en, EDUCATION_LABEL[edu as keyof typeof EDUCATION_LABEL].bn) : "";
   return (
     <div className="mx-auto grid max-w-[84rem] gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -131,9 +167,9 @@ function HomeView() {
         <section className={`${CARD} p-4`}>
           <h2 className="flex items-center gap-2 text-[1rem] text-ink"><Icon name="flame" className="size-5 text-ember" strokeWidth={1.8} />{pick(lang, "Today", "আজ")}</h2>
           <ul className="mt-3 flex flex-col gap-2 text-sm">
-            <li><Link href="/dashboard/homework" className="flex justify-between gap-2 rounded-lg bg-marigold-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Homework due", "হোমওয়ার্ক বাকি")}</span><span>{HOMEWORK.length}</span></Link></li>
+            <li><Link href="/dashboard/homework" className="flex justify-between gap-2 rounded-lg bg-marigold-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Homework due", "হোমওয়ার্ক বাকি")}</span><span>{hwDue}</span></Link></li>
             <li><Link href="/dashboard/revision" className="flex justify-between gap-2 rounded-lg bg-lagoon-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Revision cards", "রিভিশন কার্ড")}</span><span>8</span></Link></li>
-            <li><Link href="/dashboard/practice" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Practice questions", "অনুশীলন প্রশ্ন")}</span><span>{PRACTICE_QS.length}</span></Link></li>
+            <li><Link href="/dashboard/practice" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Practice questions", "অনুশীলন প্রশ্ন")}</span><span>{PRACTICE_SET_SIZE}</span></Link></li>
           </ul>
         </section>
         <section className="rounded-2xl border-2 border-ink bg-board p-4 text-paper shadow-hard-sm">
@@ -172,85 +208,554 @@ function RevisionView() {
   );
 }
 
+const DIFF_LABEL = (lang: Lang, d: 1 | 2 | 3) =>
+  d === 1
+    ? pick(lang, "Gentle practice", "সহজ অনুশীলন")
+    : d === 2
+      ? pick(lang, "Steady practice", "নিয়মিত অনুশীলন")
+      : pick(lang, "Challenge practice", "চ্যালেঞ্জ অনুশীলন");
+
 function PracticeView() {
   const { lang } = useLang();
+  const [learner, setLearner] = useState<LearnerProfile | null>(null);
+  const [results, setResults] = useState<PracticeResult[]>([]);
+  const [topicId, setTopicId] = useState<string | null>(null);
+  const [set, setSet] = useState<PracticeSet | null>(null);
   const [idx, setIdx] = useState(0);
-  const [picked, setPicked] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | string | null>(null);
+  const [picks, setPicks] = useState<(number | string | null)[]>([]);
+  const [typed, setTyped] = useState("");
+  const [showHint, setShowHint] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
-  const q = PRACTICE_QS[idx];
+  const [hwAdded, setHwAdded] = useState(false);
 
-  function choose(i: number) {
-    if (picked !== null) return;
-    setPicked(i);
-    if (i === q.answer) setScore((s) => s + 1);
-  }
-  function nextQ() {
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setLearner(loadLearner());
+      setResults(loadPracticeResults());
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const classLevel = learner?.classLevel ?? 6;
+  const catalog = getClass(classLevel);
+  const topicOptions =
+    catalog?.subjects.flatMap((s) =>
+      s.chapters.flatMap((c) => c.topics.map((tp) => ({ subject: s, topic: tp }))),
+    ) ?? [];
+  const adaptation = learner ? adaptLearner(learner) : null;
+  const summary = summarizePractice(results);
+  const q = set?.questions[idx];
+
+  function beginSet(next: PracticeSet, nextTopicId: string) {
+    setSet(next);
+    setTopicId(nextTopicId);
+    setIdx(0);
     setPicked(null);
-    if (idx + 1 >= PRACTICE_QS.length) setFinished(true);
-    else setIdx(idx + 1);
+    setPicks([]);
+    setTyped("");
+    setShowHint(false);
+    setScore(0);
+    setFinished(false);
+    setHwAdded(false);
   }
-  if (finished) {
+
+  function startSet(nextTopicId: string) {
+    if (!learner) return;
+    beginSet(buildAdaptivePracticeSet(learner, nextTopicId, results), nextTopicId);
+  }
+
+  function startMixed() {
+    if (!learner) return;
+    beginSet(buildMixedPracticeSet(learner), "mixed");
+  }
+
+  function startReview() {
+    if (!learner) return;
+    const review = buildReviewPracticeSet(learner, results);
+    if (review) beginSet(review, "review");
+  }
+
+  function choose(pick: number | string) {
+    if (!set || !q || picked !== null || !learner) return;
+    setPicked(pick);
+    const correct = isCorrectAnswer(q, pick);
+    if (correct) setScore((s) => s + 1);
+    setPicks((p) => {
+      const next = [...p];
+      next[idx] = pick;
+      return next;
+    });
+    // Every answer is an observable learning signal — it feeds adaptation,
+    // revision (mistake topics) and the Progress report.
+    const next = recordAnswer(learner, correct, q.topicId);
+    saveLearner(next);
+    setLearner(next);
+  }
+
+  function nextQ() {
+    if (!set || !learner) return;
+    setPicked(null);
+    setTyped("");
+    setShowHint(false);
+    if (idx + 1 >= set.questions.length) {
+      const graded = gradePracticeSet(set, picks);
+      setResults(appendPracticeResult(makePracticeResult(set, graded.score)));
+      setFinished(true);
+    } else {
+      setIdx(idx + 1);
+    }
+  }
+
+  function addReviewHomework() {
+    if (!learner || !set || hwAdded) return;
+    const wrongTopics = set.questions
+      .filter((item, i) => !gradePracticeSet(set, picks).correct[i])
+      .map((item) => item.topicId);
+    const assignment =
+      generateReviewHomework(learner.classLevel, [...new Set(wrongTopics)], new Date()) ??
+      generateReviewHomework(learner.classLevel, learner.mistakeTopics, new Date());
+    if (!assignment) return;
+    addAssignment(loadAssignments(learner.classLevel), assignment);
+    setHwAdded(true);
+  }
+
+  if (!learner) {
     return (
-      <div className={`mx-auto max-w-xl ${CARD} p-6 text-center`}>
-        <span className="mx-auto grid size-14 place-items-center rounded-full border-2 border-ink bg-flame text-night"><Icon name="check" className="size-7" strokeWidth={2.4} /></span>
-        <h1 className="mt-3 text-2xl text-ink">{pick(lang, "Practice complete!", "অনুশীলন শেষ!")}</h1>
-        <p className="mt-1 text-sm text-ink-soft">{pick(lang, `You got ${score} of ${PRACTICE_QS.length} right.`, `তুমি ${PRACTICE_QS.length}টির মধ্যে ${score}টি সঠিক করেছ।`)}</p>
-        <button type="button" className={`${BTN_SM} mt-4`} onClick={() => { setIdx(0); setScore(0); setPicked(null); setFinished(false); }}>{pick(lang, "Practice again", "আবার অনুশীলন করো")}</button>
+      <div className="mx-auto max-w-[84rem]">
+        <PageHead title={pick(lang, "Practice", "অনুশীলন")} sub={pick(lang, "Loading your practice…", "তোমার অনুশীলন লোড হচ্ছে…")} />
       </div>
     );
   }
+
+  if (finished && set) {
+    const graded = gradePracticeSet(set, picks);
+    return (
+      <div className={`mx-auto max-w-2xl ${CARD} p-6`}>
+        <div className="text-center">
+          <span className="mx-auto grid size-14 place-items-center rounded-full border-2 border-ink bg-flame text-night"><Icon name="check" className="size-7" strokeWidth={2.4} /></span>
+          <h1 className="mt-3 text-2xl text-ink">{pick(lang, "Practice complete!", "অনুশীলন শেষ!")}</h1>
+          <p className="mt-1 text-sm text-ink-soft">{pick(lang, `You got ${graded.score} of ${set.questions.length} right in ${set.topicTitle}.`, `তুমি ${set.topicTitle}-এ ${set.questions.length}টির মধ্যে ${graded.score}টি সঠিক করেছ।`)}</p>
+          <p className="mt-1 text-[0.82rem] font-semibold text-ink-muted">{DIFF_LABEL(lang, set.difficulty)}</p>
+        </div>
+        <ol className="mt-5 flex flex-col gap-2.5">
+          {set.questions.map((item, i) => {
+            const yourAnswer =
+              item.format === "numeric"
+                ? String(picks[i] ?? "—")
+                : (typeof picks[i] === "number" ? item.options[picks[i] as number] : undefined) ?? "—";
+            return (
+              <li key={item.id} className="rounded-xl border border-paper-edge bg-paper p-3">
+                <p className="text-sm font-bold text-ink">{i + 1}. {item.question}</p>
+                <p className={`mt-1 text-[0.85rem] font-semibold ${graded.correct[i] ? "text-kolapata" : "text-shapla-ink"}`}>
+                  {graded.correct[i]
+                    ? pick(lang, "Correct", "সঠিক")
+                    : pick(lang, `Your answer: ${yourAnswer} · Right answer: ${item.answer}`, `তোমার উত্তর: ${yourAnswer} · সঠিক উত্তর: ${item.answer}`)}
+                </p>
+                <p className="mt-0.5 text-[0.85rem] text-ink-soft">{item.explanation}</p>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {set.topicId !== "mixed" && set.topicId !== "review" ? (
+            <button type="button" className={BTN_SM} onClick={() => startSet(set.topicId)}>{pick(lang, "Practice again", "আবার অনুশীলন করো")}</button>
+          ) : null}
+          {graded.score < set.questions.length && !hwAdded ? (
+            <button type="button" className={BTN_SM} onClick={addReviewHomework}>
+              <Icon name="notes" className="size-4" strokeWidth={2} />{pick(lang, "Add review homework", "রিভিশন হোমওয়ার্ক যোগ করো")}
+            </button>
+          ) : null}
+          {hwAdded ? (
+            <Link href="/dashboard/homework" className={BTN_SM}><Icon name="check" className="size-4" strokeWidth={2.2} />{pick(lang, "Review homework added — view", "রিভিশন হোমওয়ার্ক যোগ হয়েছে — দেখো")}</Link>
+          ) : null}
+          <button type="button" className={BTN_SM} onClick={() => { setSet(null); setFinished(false); }}>{pick(lang, "Another topic", "অন্য টপিক")}</button>
+          <Link href="/dashboard/homework" className={BTN_SM}>{pick(lang, "See homework", "হোমওয়ার্ক দেখো")}<Icon name="arrow" className="size-4" strokeWidth={2.2} /></Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!set || !q) {
+    return (
+      <div className="mx-auto max-w-[84rem]">
+        <PageHead title={pick(lang, "Practice", "অনুশীলন")} sub={pick(lang, "Hints first, answers later — try it yourself first.", "আগে হিন্ট, পরে উত্তর — আগে নিজে চেষ্টা করো।")} />
+        <section className={`${CARD} p-5`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-bold text-ink">{pick(lang, "Choose a topic", "একটি টপিক বেছে নাও")}</h2>
+            <span className="rounded-full bg-marigold-soft px-3 py-1 text-[0.78rem] font-bold text-ink">{DIFF_LABEL(lang, adaptation?.difficulty ?? 2)} · {PRACTICE_SET_SIZE} {pick(lang, "questions", "টি প্রশ্ন")}</span>
+          </div>
+          {adaptation?.reasons[0] ? <p className="mt-1 text-[0.85rem] text-ink-muted">{adaptation.reasons[0]}</p> : null}
+          {summary.sessions > 0 ? (
+            <p className="mt-1 text-[0.85rem] text-ink-muted">{pick(lang, `So far: ${summary.sessions} practice sessions, ${summary.correct}/${summary.questionsAnswered} correct (${summary.accuracy}%).`, `এখন পর্যন্ত: ${summary.sessions}টি অনুশীলন সেশন, ${summary.correct}/${summary.questionsAnswered} সঠিক (${summary.accuracy}%)।`)}</p>
+          ) : null}
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <button type="button" onClick={startMixed} className="flex items-center gap-3 rounded-xl border-2 border-ink bg-lagoon-soft px-4 py-3 text-left transition-colors hover:bg-white">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-padma-ink"><Icon name="target" className="size-4.5" strokeWidth={1.9} /></span>
+              <span>
+                <span className="block font-display text-[0.95rem] font-bold text-ink">{pick(lang, "Daily Mix", "আজকের মিক্স")}</span>
+                <span className="block text-[0.8rem] text-ink-muted">{pick(lang, "A fresh question from five different topics.", "পাঁচটি ভিন্ন টপিক থেকে একটি করে নতুন প্রশ্ন।")}</span>
+              </span>
+            </button>
+            {learner && buildReviewPracticeSet(learner, results) ? (
+              <button type="button" onClick={startReview} className="flex items-center gap-3 rounded-xl border-2 border-ink bg-coral-soft px-4 py-3 text-left transition-colors hover:bg-white">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-shapla-ink"><Icon name="refresh" className="size-4.5" strokeWidth={1.9} /></span>
+                <span>
+                  <span className="block font-display text-[0.95rem] font-bold text-ink">{pick(lang, "Mistake Review", "ভুলের রিভিশন")}</span>
+                  <span className="block text-[0.8rem] text-ink-muted">{pick(lang, "Revisit the topics that tripped you up.", "যেসব টপিকে আটকেছিলে, সেগুলো আবার দেখো।")}</span>
+                </span>
+              </button>
+            ) : null}
+          </div>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {topicOptions.map(({ subject, topic }) => (
+              <li key={topic.id}>
+                <button
+                  type="button"
+                  onClick={() => startSet(topic.id)}
+                  className={`flex w-full flex-col gap-0.5 rounded-xl border-2 border-ink px-3.5 py-3 text-left transition-colors ${topicId === topic.id ? "bg-marigold-soft" : "bg-paper hover:bg-white"}`}
+                >
+                  <span className="text-[0.7rem] font-bold tracking-wide text-ink-muted uppercase">{t(lang, { en: subject.title, bn: subject.titleBn })}</span>
+                  <span className="font-display text-[0.95rem] leading-snug font-bold text-ink">{t(lang, { en: topic.title, bn: topic.titleBn })}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-[84rem]">
       <PageHead title={pick(lang, "Practice", "অনুশীলন")} sub={pick(lang, "Hints first, answers later — try it yourself first.", "আগে হিন্ট, পরে উত্তর — আগে নিজে চেষ্টা করো।")} />
       <section className={`${CARD} mx-auto max-w-2xl p-5`}>
-        <p className="text-[0.8rem] font-bold text-ink-muted">{pick(lang, `Question ${idx + 1} of ${PRACTICE_QS.length}`, `প্রশ্ন ${idx + 1} / ${PRACTICE_QS.length}`)} · {pick(lang, "Score", "স্কোর")}: {score}</p>
-        <h2 className="mt-2 font-display text-xl font-bold text-ink">{t(lang, q.q)}</h2>
-        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-          {q.options.map((op, i) => {
-            const isRight = picked !== null && i === q.answer;
-            const isWrong = picked === i && i !== q.answer;
-            return (
-              <li key={op}>
-                <button type="button" onClick={() => choose(i)} className={`w-full rounded-xl border-2 border-ink px-4 py-3 text-left font-semibold text-ink transition-colors ${isRight ? "bg-kolapata-soft" : isWrong ? "bg-coral-soft" : "bg-paper hover:bg-white"}`}>{op}</button>
-              </li>
-            );
-          })}
-        </ul>
-        {picked !== null ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p className={`text-sm font-bold ${picked === q.answer ? "text-kolapata" : "text-shapla-ink"}`}>{picked === q.answer ? pick(lang, "Correct — the light is on!", "সঠিক — আলো জ্বলে গেছে!") : pick(lang, "Not quite — the right answer is highlighted.", "হয়নি — সঠিক উত্তরটা দেখিয়ে দেওয়া হয়েছে।")}</p>
-            <button type="button" onClick={nextQ} className={BTN_SM}>{idx + 1 >= PRACTICE_QS.length ? pick(lang, "See result", "ফলাফল দেখো") : pick(lang, "Next question", "পরের প্রশ্ন")}<Icon name="arrow" className="size-4" strokeWidth={2.2} /></button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[0.8rem] font-bold text-ink-muted">{pick(lang, `Question ${idx + 1} of ${set.questions.length}`, `প্রশ্ন ${idx + 1} / ${set.questions.length}`)} · {pick(lang, "Score", "স্কোর")}: {score}</p>
+          <span className="rounded-full bg-marigold-soft px-2.5 py-0.5 text-[0.72rem] font-bold text-ink">{set.topicTitle} · {DIFF_LABEL(lang, set.difficulty)}</span>
+        </div>
+        <div aria-hidden="true" className="mt-3 h-2 overflow-hidden rounded-full border border-ink/20 bg-paper">
+          <div className="h-full bg-brand-500 transition-all" style={{ width: `${((idx + (picked !== null ? 1 : 0)) / set.questions.length) * 100}%` }} />
+        </div>
+        <h2 className="mt-3 font-display text-xl font-bold text-ink">{q.question}</h2>
+        {q.format === "numeric" ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && typed.trim()) choose(typed.trim()); }}
+              disabled={picked !== null}
+              inputMode="decimal"
+              aria-label={pick(lang, "Type your answer", "তোমার উত্তর লেখো")}
+              placeholder={pick(lang, "Type your answer…", "তোমার উত্তর লেখো…")}
+              className="w-44 rounded-xl border-2 border-ink bg-white px-4 py-3 font-display text-lg font-bold text-ink placeholder:text-base placeholder:font-medium placeholder:text-ink-muted disabled:opacity-60"
+            />
+            <button type="button" disabled={picked !== null || !typed.trim()} onClick={() => choose(typed.trim())} className={`${BTN_SM} disabled:cursor-not-allowed disabled:opacity-50`}>
+              <Icon name="check" className="size-4" strokeWidth={2.4} />{pick(lang, "Check answer", "উত্তর যাচাই করো")}
+            </button>
           </div>
-        ) : null}
+        ) : (
+          <ul className={`mt-4 grid gap-2 ${q.options.length <= 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {q.options.map((op, i) => {
+              const isRight = picked !== null && i === q.answerIndex;
+              const isWrong = picked === i && i !== q.answerIndex;
+              return (
+                <li key={op}>
+                  <button type="button" onClick={() => choose(i)} className={`w-full rounded-xl border-2 border-ink px-4 py-3 text-left font-semibold text-ink transition-colors ${isRight ? "bg-kolapata-soft" : isWrong ? "bg-coral-soft" : "bg-paper hover:bg-white"}`}>{op}</button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {picked === null ? (
+          <div className="mt-4">
+            <button type="button" aria-expanded={showHint} onClick={() => setShowHint((v) => !v)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+              <Icon name="lightbulb" className="size-4" strokeWidth={1.9} />{showHint ? pick(lang, "Hide hint", "হিন্ট লুকাও") : pick(lang, "Show a hint", "হিন্ট দেখো")}
+            </button>
+            {showHint ? <p className="mt-2 rounded-lg bg-sand px-3 py-2 text-sm text-ink-soft">{q.hint}</p> : null}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-2">
+            <p className={`text-sm font-bold ${isCorrectAnswer(q, picked) ? "text-kolapata" : "text-shapla-ink"}`}>
+              {isCorrectAnswer(q, picked)
+                ? pick(lang, "Correct — the light is on!", "সঠিক — আলো জ্বলে গেছে!")
+                : q.format === "numeric"
+                  ? pick(lang, `Not quite — the answer is ${q.answer}.`, `হয়নি — সঠিক উত্তর ${q.answer}।`)
+                  : pick(lang, "Not quite — the right answer is highlighted.", "হয়নি — সঠিক উত্তরটা দেখিয়ে দেওয়া হয়েছে।")}
+            </p>
+            <p className="rounded-lg bg-sand px-3 py-2 text-sm text-ink-soft">{q.explanation}</p>
+            <div>
+              <button type="button" onClick={nextQ} className={BTN_SM}>{idx + 1 >= set.questions.length ? pick(lang, "See result", "ফলাফল দেখো") : pick(lang, "Next question", "পরের প্রশ্ন")}<Icon name="arrow" className="size-4" strokeWidth={2.2} /></button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
+function dueLabel(lang: Lang, a: HomeworkAssignment): string {
+  const date = new Date(a.dueAt).toLocaleDateString(lang === "bn" ? "bn-BD" : "en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const today = new Date().toDateString() === new Date(a.dueAt).toDateString();
+  return `${a.subjectTitle} · ${today ? pick(lang, "Due tonight", "আজ রাতে জমা") : `${pick(lang, "Due", "জমা")} ${date}`}`;
+}
+
 function HomeworkView() {
   const { lang } = useLang();
-  const [done, setDone] = useState<boolean[]>(() => {
-    try { return JSON.parse(window.localStorage.getItem("kupi-homework") ?? "[]") as boolean[]; } catch { return []; }
-  });
-  const toggle = (i: number) => setDone((d) => {
-    const next = HOMEWORK.map((_, j) => (j === i ? !(d[j] ?? false) : (d[j] ?? false)));
-    window.localStorage.setItem("kupi-homework", JSON.stringify(next));
-    return next;
-  });
+  const [list, setList] = useState<HomeworkAssignment[]>([]);
+  const [classLevel, setClassLevel] = useState(6);
+  const [mistakeCount, setMistakeCount] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newBucket, setNewBucket] = useState<DueBucket>("tomorrow");
+  const [topicPick, setTopicPick] = useState("");
+  const [topicBucket, setTopicBucket] = useState<DueBucket>("tonight");
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const learner = loadLearner();
+      setClassLevel(learner.classLevel);
+      setMistakeCount(learner.mistakeTopics.length);
+      setList(loadAssignments(learner.classLevel));
+      setLoaded(true);
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  const now = new Date();
+  const stats = completionStats(list);
+  const pending = list.filter((a) => a.status !== "done");
+  const overdue = pending.filter(
+    (a) => new Date(a.dueAt).getTime() < now.getTime(),
+  );
+  const upcoming = pending
+    .filter((a) => new Date(a.dueAt).getTime() >= now.getTime())
+    .sort((a, b) => +new Date(a.dueAt) - +new Date(b.dueAt));
+  const completed = list.filter((a) => a.status === "done");
+
+  const topicOptions =
+    getClass(classLevel)?.subjects.flatMap((s) =>
+      s.chapters.flatMap((c) => c.topics.map((tp) => ({ subject: s, topic: tp }))),
+    ) ?? [];
+
+  function toggleDone(a: HomeworkAssignment) {
+    setList((current) => {
+      const next = current.map((x) => (x.id === a.id ? markDone(x, x.status !== "done") : x));
+      saveAssignments(next);
+      return next;
+    });
+  }
+
+  function toggleStep(a: HomeworkAssignment, stepIndex: number) {
+    setList((current) => {
+      const next = current.map((x) => (x.id === a.id ? toggleTask(x, stepIndex) : x));
+      saveAssignments(next);
+      return next;
+    });
+  }
+
+  function addReviewFromMistakes() {
+    const learner = loadLearner();
+    const assignment = generateReviewHomework(learner.classLevel, learner.mistakeTopics, new Date());
+    if (!assignment) return;
+    setList((current) => addAssignment(current, assignment));
+  }
+
+  function remove(a: HomeworkAssignment) {
+    setList((current) => {
+      const next = current.filter((x) => x.id !== a.id);
+      saveAssignments(next);
+      return next;
+    });
+  }
+
+  function addCustom() {
+    const title = newTitle.trim();
+    if (!title) return;
+    const assignment: HomeworkAssignment = {
+      id: `hw-custom-${Date.now().toString(36)}`,
+      title,
+      titleBn: title,
+      subjectId: "custom",
+      subjectTitle: pick(lang, "My own work", "আমার নিজের কাজ"),
+      topicId: "custom",
+      topicTitle: title,
+      instructions: title,
+      instructionsBn: title,
+      tasks: [],
+      estMinutes: 10,
+      source: "custom",
+      dueBucket: newBucket,
+      dueAt: dueAtForBucket(newBucket, new Date()).toISOString(),
+      status: "assigned",
+      createdAt: new Date().toISOString(),
+      completedAt: null,
+    };
+    setList((current) => addAssignment(current, assignment));
+    setNewTitle("");
+  }
+
+  function addFromTopic() {
+    if (!topicPick) return;
+    const assignment = generateHomeworkFromTopic({
+      classLevel,
+      topicId: topicPick,
+      dueBucket: topicBucket,
+      source: "custom",
+      now: new Date(),
+    });
+    setList((current) => addAssignment(current, assignment));
+    setTopicPick("");
+  }
+
+  const renderCard = (a: HomeworkAssignment, late: boolean) => (
+    <li key={a.id} className={`${CARD} flex flex-col gap-2 p-4 ${a.status === "done" ? "opacity-70" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-marigold-soft text-ember-ink"><Icon name="notes" className="size-4.5" strokeWidth={1.9} /></span>
+        {late ? <span className="rounded-full bg-coral-soft px-2.5 py-0.5 text-[0.7rem] font-bold text-shapla-ink">{pick(lang, "Overdue", "দেরি হয়ে গেছে")}</span> : null}
+      </div>
+      <h3 className="font-display text-[1.02rem] leading-snug font-bold text-ink">{lang === "bn" ? a.titleBn : a.title}</h3>
+      <p className="text-[0.85rem] leading-relaxed text-ink-soft">{lang === "bn" ? a.instructionsBn : a.instructions}</p>
+      {a.tasks.length > 0 ? (
+        <fieldset className="mt-1">
+          <legend className="text-[0.78rem] font-bold text-ink-muted">
+            {pick(lang, `Steps · ${taskProgress(a).done}/${taskProgress(a).total} done`, `ধাপ · ${taskProgress(a).done}/${taskProgress(a).total} শেষ`)}
+          </legend>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            {a.tasks.map((step, si) => (
+              <li key={`${a.id}-step-${si}`}>
+                <button
+                  type="button"
+                  aria-pressed={step.done}
+                  onClick={() => toggleStep(a, si)}
+                  className={`flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left text-[0.85rem] font-medium transition-colors ${step.done ? "text-ink-muted line-through" : "text-ink hover:bg-paper"}`}
+                >
+                  <span aria-hidden="true" className={`mt-0.5 grid size-4.5 shrink-0 place-items-center rounded border-2 border-ink ${step.done ? "bg-kolapata text-white" : "bg-white"}`}>
+                    {step.done ? <Icon name="check" className="size-3" strokeWidth={3} /> : null}
+                  </span>
+                  {lang === "bn" ? step.textBn : step.text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      ) : null}
+      <p className="flex flex-wrap items-center gap-x-2 text-[0.8rem] font-semibold text-ink-muted">
+        <span>{dueLabel(lang, a)}</span>
+        <span aria-hidden="true">·</span>
+        <span className="inline-flex items-center gap-1"><Icon name="clock" className="size-3.5" strokeWidth={2} />{pick(lang, `~${a.estMinutes} min`, `~${a.estMinutes} মিনিট`)}</span>
+      </p>
+      <div className="mt-auto flex flex-wrap gap-2 pt-1">
+        <button type="button" aria-pressed={a.status === "done"} onClick={() => toggleDone(a)} className={BTN_SM}>
+          <Icon name="check" className="size-4" strokeWidth={2.4} />{a.status === "done" ? pick(lang, "Done", "শেষ হয়েছে") : pick(lang, "Mark done", "শেষ হয়েছে বলো")}
+        </button>
+        <button type="button" onClick={() => remove(a)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+          {pick(lang, "Remove", "বাদ দাও")}
+        </button>
+      </div>
+    </li>
+  );
+
   return (
     <div className="mx-auto max-w-[84rem]">
       <PageHead title={pick(lang, "Homework", "হোমওয়ার্ক")} sub={pick(lang, "Tonight's work — tick each one off as you finish. Stuck? Ask your AI teacher.", "আজকের কাজ — শেষ হলেই টিক দাও। আটকে গেলে AI শিক্ষককে জিজ্ঞেস করো।")} />
-      <ul className="grid gap-3 lg:grid-cols-3">
-        {HOMEWORK.map((h, i) => (
-          <li key={h.title.en} className={`${CARD} flex flex-col gap-2 p-4 ${done[i] ? "opacity-70" : ""}`}>
-            <span className="grid size-9 place-items-center rounded-lg bg-marigold-soft text-ember-ink"><Icon name="notes" className="size-4.5" strokeWidth={1.9} /></span>
-            <h2 className="font-display text-lg leading-snug font-bold text-ink">{t(lang, h.title)}</h2>
-            <p className="text-[0.85rem] text-ink-muted">{t(lang, h.meta)}</p>
-            <button type="button" aria-pressed={!!done[i]} onClick={() => toggle(i)} className={`${BTN_SM} mt-auto self-start`}><Icon name="check" className="size-4" strokeWidth={2.4} />{done[i] ? pick(lang, "Done", "শেষ হয়েছে") : pick(lang, "Mark done", "শেষ হয়েছে বলো")}</button>
-          </li>
-        ))}
-      </ul>
+      {loaded && stats.total > 0 ? (
+        <p className="mb-3 text-sm font-semibold text-ink-soft">
+          {pick(lang, `${stats.done} of ${stats.total} done (${stats.rate}%).`, `${stats.total}টির মধ্যে ${stats.done}টি শেষ (${stats.rate}%)।`)}
+        </p>
+      ) : null}
+
+      {overdue.length > 0 ? (
+        <section aria-label={pick(lang, "Overdue homework", "দেরি হয়ে যাওয়া হোমওয়ার্ক")} className="mb-4">
+          <h2 className="mb-2 font-display text-lg font-bold text-shapla-ink">{pick(lang, "Overdue — finish these first", "দেরি হয়ে গেছে — এগুলো আগে শেষ করো")}</h2>
+          <ul className="grid gap-3 lg:grid-cols-3">{overdue.map((a) => renderCard(a, true))}</ul>
+        </section>
+      ) : null}
+
+      <section aria-label={pick(lang, "Homework to do", "বাকি হোমওয়ার্ক")}>
+        <h2 className="mb-2 font-display text-lg font-bold text-ink">{pick(lang, "To do", "যা যা বাকি")}</h2>
+        {upcoming.length === 0 && overdue.length === 0 ? (
+          <p className={`${CARD} p-4 text-sm text-ink-soft`}>{pick(lang, "Nothing due — nice work! Add a task below or pick a topic from your book.", "কিছু বাকি নেই — দারুণ! নিচে নতুন কাজ যোগ করো অথবা বই থেকে টপিক বেছে নাও।")}</p>
+        ) : (
+          <ul className="grid gap-3 lg:grid-cols-3">{upcoming.map((a) => renderCard(a, false))}</ul>
+        )}
+      </section>
+
+      {loaded && mistakeCount > 0 ? (
+        <section className={`${CARD} mb-4 flex flex-wrap items-center gap-3 p-4`}>
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-coral-soft text-shapla-ink"><Icon name="refresh" className="size-4.5" strokeWidth={1.9} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-[1.02rem] font-bold text-ink">{pick(lang, "Tricky topics to revisit", "আটকে যাওয়া টপিকগুলো আবার দেখো")}</h2>
+            <p className="text-[0.85rem] text-ink-muted">{pick(lang, `${mistakeCount} topic(s) tripped you up recently. Turn one into short review homework.`, `সম্প্রতি ${mistakeCount}টি টপিকে আটকেছিলে। একটি থেকে ছোট রিভিশন হোমওয়ার্ক বানাও।`)}</p>
+          </div>
+          <button type="button" onClick={addReviewFromMistakes} className={BTN_SM}>
+            <Icon name="notes" className="size-4" strokeWidth={2} />{pick(lang, "Add review homework", "রিভিশন হোমওয়ার্ক যোগ করো")}
+          </button>
+        </section>
+      ) : null}
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <section className={`${CARD} p-4`}>
+          <h2 className="font-display text-[1.02rem] font-bold text-ink">{pick(lang, "From your book", "তোমার বই থেকে")}</h2>
+          <p className="mt-0.5 text-[0.85rem] text-ink-muted">{pick(lang, "Pick a topic — we will write tonight's task from it.", "একটি টপিক বেছে নাও — সেটি দিয়েই আজকের কাজ বানিয়ে দিচ্ছি।")}</p>
+          <div className="mt-3 flex flex-col gap-2">
+            <select aria-label={pick(lang, "Topic", "টপিক")} value={topicPick} onChange={(e) => setTopicPick(e.target.value)} className="w-full rounded-xl border-2 border-ink bg-white px-3 py-2.5 text-sm font-semibold text-ink">
+              <option value="">{pick(lang, "Choose a topic…", "টপিক বেছে নাও…")}</option>
+              {topicOptions.map(({ subject, topic }) => (
+                <option key={topic.id} value={topic.id}>{t(lang, { en: subject.title, bn: subject.titleBn })} — {t(lang, { en: topic.title, bn: topic.titleBn })}</option>
+              ))}
+            </select>
+            <div className="flex flex-wrap gap-2">
+              <select aria-label={pick(lang, "Due", "জমার সময়")} value={topicBucket} onChange={(e) => setTopicBucket(e.target.value as DueBucket)} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+                <option value="tonight">{pick(lang, "Tonight", "আজ রাতে")}</option>
+                <option value="tomorrow">{pick(lang, "Tomorrow", "আগামীকাল")}</option>
+                <option value="friday">{pick(lang, "Friday", "শুক্রবার")}</option>
+                <option value="weekend">{pick(lang, "Weekend", "সাপ্তাহিক ছুটি")}</option>
+              </select>
+              <button type="button" disabled={!topicPick} onClick={addFromTopic} className={`${BTN_SM} disabled:cursor-not-allowed disabled:opacity-50`}>
+                <Icon name="notes" className="size-4" strokeWidth={2} />{pick(lang, "Add homework", "হোমওয়ার্ক যোগ করো")}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className={`${CARD} p-4`}>
+          <h2 className="font-display text-[1.02rem] font-bold text-ink">{pick(lang, "Add your own", "নিজে যোগ করো")}</h2>
+          <p className="mt-0.5 text-[0.85rem] text-ink-muted">{pick(lang, "Teacher gave extra work? Note it here so it is not forgotten.", "শিক্ষক বাড়তি কাজ দিয়েছেন? এখানে লিখে রাখো, ভুলবে না।")}</p>
+          <div className="mt-3 flex flex-col gap-2">
+            <input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addCustom(); }}
+              placeholder={pick(lang, "e.g. Read pages 40–42 and note 5 words", "যেমন: ৪০–৪২ পৃষ্ঠা পড়ো, ৫টি শব্দ লেখো")}
+              className="w-full rounded-xl border-2 border-ink bg-white px-3 py-2.5 text-sm font-medium text-ink placeholder:text-ink-muted"
+            />
+            <div className="flex flex-wrap gap-2">
+              <select aria-label={pick(lang, "Due", "জমার সময়")} value={newBucket} onChange={(e) => setNewBucket(e.target.value as DueBucket)} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+                <option value="tonight">{pick(lang, "Tonight", "আজ রাতে")}</option>
+                <option value="tomorrow">{pick(lang, "Tomorrow", "আগামীকাল")}</option>
+                <option value="friday">{pick(lang, "Friday", "শুক্রবার")}</option>
+                <option value="weekend">{pick(lang, "Weekend", "সাপ্তাহিক ছুটি")}</option>
+              </select>
+              <button type="button" disabled={!newTitle.trim()} onClick={addCustom} className={`${BTN_SM} disabled:cursor-not-allowed disabled:opacity-50`}>
+                <Icon name="check" className="size-4" strokeWidth={2.2} />{pick(lang, "Add", "যোগ করো")}
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {completed.length > 0 ? (
+        <section aria-label={pick(lang, "Completed homework", "সম্পন্ন হোমওয়ার্ক")} className="mt-4">
+          <h2 className="mb-2 font-display text-lg font-bold text-ink">{pick(lang, "Completed", "সম্পন্ন")}</h2>
+          <ul className="grid gap-3 lg:grid-cols-3">{completed.map((a) => renderCard(a, false))}</ul>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -300,22 +805,50 @@ function SimpleView({ section }: { section: DashSection }) {
           <Link href="/onboarding?edit=1" className={`${BTN_SM} mt-4`}>{pick(lang, "Update profile", "প্রোফাইল বদলাও")}</Link>
         </section>
       ) : null}
-      {section === "progress" ? (
-        <section className={`${CARD} max-w-xl p-5`}>
-          <h2 className="font-display text-lg font-bold text-ink">{pick(lang, "This week", "এই সপ্তাহ")}</h2>
-          <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
-            <li className="flex justify-between rounded-lg bg-paper px-3 py-2"><span>{pick(lang, "Lessons completed", "লেসন শেষ হয়েছে")}</span><strong className="text-ink">2</strong></li>
-            <li className="flex justify-between rounded-lg bg-paper px-3 py-2"><span>{pick(lang, "Practice score", "অনুশীলনের স্কোর")}</span><strong className="text-ink">—</strong></li>
-            <li className="flex justify-between rounded-lg bg-paper px-3 py-2"><span>{pick(lang, "Homework done", "হোমওয়ার্ক শেষ")}</span><strong className="text-ink">—</strong></li>
-          </ul>
-        </section>
-      ) : null}
+      {section === "progress" ? <ProgressStats lang={lang} /> : null}
       {!["subjects", "profile", "progress"].includes(section) ? (
         <section className={`${CARD} max-w-xl p-5`}>
           <p className="text-sm leading-relaxed text-ink-soft">{pick(lang, "This part of your dashboard is ready for your content. Use the sidebar — Lesson, Revision, Practice, Homework and Games are fully working.", "ড্যাশবোর্ডের এই অংশ তোমার কনটেন্টের জন্য তৈরি। সাইডবারের লেসন, রিভিশন, অনুশীলন, হোমওয়ার্ক ও গেমস পুরোপুরি কাজ করছে।")}</p>
         </section>
       ) : null}
     </div>
+  );
+}
+
+function ProgressStats({ lang }: { lang: Lang }) {
+  const [stats, setStats] = useState<{
+    quizAccuracy: number | null;
+    practice: ReturnType<typeof summarizePractice> | null;
+    homework: ReturnType<typeof completionStats> | null;
+  }>({ quizAccuracy: null, practice: null, homework: null });
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const learner = loadLearner();
+      setStats({
+        quizAccuracy:
+          learner.quizAttempted > 0 ? Math.round((learner.quizCorrect / learner.quizAttempted) * 100) : null,
+        practice: summarizePractice(loadPracticeResults()),
+        homework: completionStats(loadAssignments(learner.classLevel)),
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+  const row = (label: string, value: string) => (
+    <li className="flex justify-between rounded-lg bg-paper px-3 py-2"><span>{label}</span><strong className="text-ink">{value}</strong></li>
+  );
+  return (
+    <section className={`${CARD} max-w-xl p-5`}>
+      <h2 className="font-display text-lg font-bold text-ink">{pick(lang, "Your learning so far", "এ পর্যন্ত তোমার শেখা")}</h2>
+      <ul className="mt-3 flex flex-col gap-2 text-sm text-ink-soft">
+        {row(pick(lang, "Class & practice accuracy", "ক্লাস ও অনুশীলনের নির্ভুলতা"), stats.quizAccuracy === null ? "—" : `${stats.quizAccuracy}%`)}
+        {row(pick(lang, "Practice sessions", "অনুশীলন সেশন"), stats.practice && stats.practice.sessions > 0 ? `${stats.practice.sessions} · ${stats.practice.accuracy}%` : "—")}
+        {row(pick(lang, "Homework done", "হোমওয়ার্ক শেষ"), stats.homework && stats.homework.total > 0 ? `${stats.homework.done}/${stats.homework.total}` : "—")}
+      </ul>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link href="/dashboard/practice" className={BTN_SM}><Icon name="play" className="size-4" />{pick(lang, "Practice now", "এখন অনুশীলন করো")}</Link>
+        <Link href="/dashboard/homework" className={BTN_SM}><Icon name="notes" className="size-4" />{pick(lang, "Open homework", "হোমওয়ার্ক খোলো")}</Link>
+      </div>
+    </section>
   );
 }
 
