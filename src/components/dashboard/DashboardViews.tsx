@@ -11,7 +11,6 @@ import { adaptLearner, recordAnswer, type LearnerProfile } from "../../lib/learn
 import { loadLearner, saveLearner } from "../../lib/learner/store";
 import { getClass } from "../../lib/nctb/catalog";
 import {
-  PRACTICE_SET_SIZE,
   buildAdaptivePracticeSet,
   buildBookmarkSet,
   buildMixedPracticeSet,
@@ -20,6 +19,7 @@ import {
   gradePracticeSet,
   isCorrectAnswer,
   makePracticeResult,
+  paceSetSize,
   summarizePractice,
   type PracticeResult,
   type PracticeSet,
@@ -123,12 +123,15 @@ function HomeView() {
   const { name, edu } = useName();
   const [hwDue, setHwDue] = useState(0);
   const [hwOverdue, setHwOverdue] = useState(0);
+  const [practiceSize, setPracticeSize] = useState(5);
   useEffect(() => {
     const id = requestAnimationFrame(() => {
-      const assignments = loadAssignments(loadLearner().classLevel);
+      const learner = loadLearner();
+      const assignments = loadAssignments(learner.classLevel);
       const now = new Date();
       setHwDue(dueSoonCount(assignments, now));
       setHwOverdue(overdueCount(assignments, now));
+      setPracticeSize(paceSetSize(learner.pace));
     });
     return () => cancelAnimationFrame(id);
   }, []);
@@ -192,7 +195,7 @@ function HomeView() {
               <li><Link href="/dashboard/homework" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-shapla-ink"><span>{pick(lang, "Overdue — finish first", "দেরি হয়ে গেছে — আগে এগুলো")}</span><span>{hwOverdue}</span></Link></li>
             ) : null}
             <li><Link href="/dashboard/revision" className="flex justify-between gap-2 rounded-lg bg-lagoon-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Revision cards", "রিভিশন কার্ড")}</span><span>8</span></Link></li>
-            <li><Link href="/dashboard/practice" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Practice questions", "অনুশীলন প্রশ্ন")}</span><span>{PRACTICE_SET_SIZE}</span></Link></li>
+            <li><Link href="/dashboard/practice" className="flex justify-between gap-2 rounded-lg bg-coral-soft px-3 py-2 font-semibold text-ink"><span>{pick(lang, "Practice questions", "অনুশীলন প্রশ্ন")}</span><span>{practiceSize}</span></Link></li>
           </ul>
         </section>
         <section className="rounded-2xl border-2 border-ink bg-board p-4 text-paper shadow-hard-sm">
@@ -231,7 +234,8 @@ function PracticeView() {
   const [picked, setPicked] = useState<number | string | null>(null);
   const [picks, setPicks] = useState<(number | string | null)[]>([]);
   const [typed, setTyped] = useState("");
-  const [showHint, setShowHint] = useState(false);
+  const [hintLevel, setHintLevel] = useState(0);
+  const [showExample, setShowExample] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
   const [hwAdded, setHwAdded] = useState(false);
@@ -262,10 +266,18 @@ function PracticeView() {
     setPicked(null);
     setPicks([]);
     setTyped("");
-    setShowHint(false);
+    setHintLevel(0);
+    setShowExample(false);
     setScore(0);
     setFinished(false);
     setHwAdded(false);
+  }
+
+  function updatePersona(patch: Partial<LearnerProfile>) {
+    if (!learner) return;
+    const next = { ...learner, ...patch, updatedAt: new Date().toISOString() };
+    saveLearner(next);
+    setLearner(next);
   }
 
   function startSet(nextTopicId: string) {
@@ -322,7 +334,8 @@ function PracticeView() {
     if (!set || !learner) return;
     setPicked(null);
     setTyped("");
-    setShowHint(false);
+    setHintLevel(0);
+    setShowExample(false);
     if (idx + 1 >= set.questions.length) {
       const graded = gradePracticeSet(set, picks);
       setResults(appendPracticeResult(makePracticeResult(set, graded.score)));
@@ -410,10 +423,33 @@ function PracticeView() {
     return (
       <div className="mx-auto max-w-[84rem]">
         <PageHead title={pick(lang, "Practice", "অনুশীলন")} sub={pick(lang, "Hints first, answers later — try it yourself first.", "আগে হিন্ট, পরে উত্তর — আগে নিজে চেষ্টা করো।")} />
+        <section aria-label={pick(lang, "Your learning style", "তোমার শেখার ধরন")} className={`${CARD} mb-4 flex flex-wrap items-end gap-3 p-4`}>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-[1.02rem] font-bold text-ink">{pick(lang, "Practice made for you", "তোমার জন্য তৈরি অনুশীলন")}</h2>
+            <p className="text-[0.85rem] text-ink-muted">{pick(lang, "Style adds examples, drawing prompts or step hints; pace sets how many questions.", "ধরন অনুযায়ী উদাহরণ, ছবি আঁকার ইঙ্গিত বা ধাপ-হিন্ট আসে; গতি ঠিক করে কয়টি প্রশ্ন।")}</p>
+          </div>
+          <label className="flex flex-col gap-1 text-[0.78rem] font-bold text-ink-muted">
+            {pick(lang, "I learn best…", "আমি সবচেয়ে ভালো শিখি…")}
+            <select value={learner.preferredStyle} onChange={(e) => updatePersona({ preferredStyle: e.target.value as LearnerProfile["preferredStyle"] })} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+              <option value="step-by-step">{pick(lang, "Step by step", "ধাপে ধাপে")}</option>
+              <option value="examples-first">{pick(lang, "Examples first", "আগে উদাহরণ")}</option>
+              <option value="visual">{pick(lang, "With pictures", "ছবি দিয়ে")}</option>
+              <option value="challenge">{pick(lang, "Challenge me", "চ্যালেঞ্জ দাও")}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-[0.78rem] font-bold text-ink-muted">
+            {pick(lang, "My pace…", "আমার গতি…")}
+            <select value={learner.pace} onChange={(e) => updatePersona({ pace: e.target.value as LearnerProfile["pace"] })} className="rounded-xl border-2 border-ink bg-white px-3 py-2 text-sm font-semibold text-ink">
+              <option value="slow">{pick(lang, "Slow & steady (3)", "ধীরে ধীরে (৩)")}</option>
+              <option value="steady">{pick(lang, "Steady (5)", "নিয়মিত (৫)")}</option>
+              <option value="fast">{pick(lang, "Fast (7)", "দ্রুত (৭)")}</option>
+            </select>
+          </label>
+        </section>
         <section className={`${CARD} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-display text-lg font-bold text-ink">{pick(lang, "Choose a topic", "একটি টপিক বেছে নাও")}</h2>
-            <span className="rounded-full bg-marigold-soft px-3 py-1 text-[0.78rem] font-bold text-ink">{DIFF_LABEL(lang, adaptation?.difficulty ?? 2)} · {PRACTICE_SET_SIZE} {pick(lang, "questions", "টি প্রশ্ন")}</span>
+            <span className="rounded-full bg-marigold-soft px-3 py-1 text-[0.78rem] font-bold text-ink">{DIFF_LABEL(lang, adaptation?.difficulty ?? 2)} · {paceSetSize(learner.pace)} {pick(lang, "questions", "টি প্রশ্ন")}</span>
           </div>
           {adaptation?.reasons[0] ? <p className="mt-1 text-[0.85rem] text-ink-muted">{adaptation.reasons[0]}</p> : null}
           {summary.sessions > 0 ? (
@@ -518,12 +554,34 @@ function PracticeView() {
             })}
           </ul>
         )}
-        {picked === null ? (
-          <div className="mt-4">
-            <button type="button" aria-expanded={showHint} onClick={() => setShowHint((v) => !v)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
-              <Icon name="lightbulb" className="size-4" strokeWidth={1.9} />{showHint ? pick(lang, "Hide hint", "হিন্ট লুকাও") : pick(lang, "Show a hint", "হিন্ট দেখো")}
+        {q.workedExample ? (
+          <div className="mt-3">
+            <button type="button" aria-expanded={showExample} onClick={() => setShowExample((v) => !v)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+              <Icon name="book" className="size-4" strokeWidth={1.9} />{showExample ? pick(lang, "Hide the example", "উদাহরণ লুকাও") : pick(lang, "See a worked example first", "আগে একটি করে-দেখানো উদাহরণ দেখো")}
             </button>
-            {showHint ? <p className="mt-2 rounded-lg bg-sand px-3 py-2 text-sm text-ink-soft">{q.hint}</p> : null}
+            {showExample ? <p className="mt-2 rounded-lg bg-lagoon-soft px-3 py-2 text-sm text-ink-soft">{q.workedExample}</p> : null}
+          </div>
+        ) : null}
+        {q.drawPrompt ? (
+          <p className="mt-3 flex items-center gap-2 rounded-lg bg-marigold-soft px-3 py-2 text-sm font-semibold text-ink">
+            <Icon name="pen" className="size-4 shrink-0" strokeWidth={1.9} />{pick(lang, "Draw it first: sketch the problem before you answer.", "আগে এঁকে নাও: উত্তর দেওয়ার আগে সমস্যাটির ছবি আঁকো।")}
+          </p>
+        ) : null}
+        {picked === null ? (
+          <div className="mt-4 flex flex-col items-start gap-2">
+            <button type="button" aria-expanded={hintLevel > 0} onClick={() => setHintLevel((v) => (v > 0 ? 0 : 1))} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+              <Icon name="lightbulb" className="size-4" strokeWidth={1.9} />{hintLevel > 0 ? pick(lang, "Hide hint", "হিন্ট লুকাও") : pick(lang, "Show a hint", "হিন্ট দেখো")}
+            </button>
+            {hintLevel >= 1 ? <p className="rounded-lg bg-sand px-3 py-2 text-sm text-ink-soft">{q.hint}</p> : null}
+            {hintLevel >= 1 && q.hint2 ? (
+              hintLevel >= 2 ? (
+                <p className="rounded-lg bg-sand px-3 py-2 text-sm text-ink-soft">{q.hint2}</p>
+              ) : (
+                <button type="button" onClick={() => setHintLevel(2)} className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-white px-3.5 py-1.5 text-sm font-bold text-ink">
+                  <Icon name="lightbulb" className="size-4" strokeWidth={1.9} />{pick(lang, "One more hint", "আরেকটি হিন্ট")}
+                </button>
+              )
+            ) : null}
           </div>
         ) : (
           <div className="mt-4 flex flex-col gap-2">

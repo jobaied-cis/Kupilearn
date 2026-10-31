@@ -9,7 +9,10 @@ import {
   gradePracticeSet,
   isCorrectAnswer,
   makePracticeResult,
+  paceSetSize,
   parseNumericAnswer,
+  personaFromLearner,
+  shapeQuestionForPersona,
   summarizePractice,
 } from "./engine";
 import { defaultLearner, recordAnswer } from "../learner/adapt";
@@ -222,6 +225,33 @@ describe("practice engine", () => {
     expect(set!.questions.map((q) => q.question)).toEqual(source.questions.map((q) => q.question));
     const many = Array.from({ length: 14 }, () => source.questions).flat();
     expect(buildBookmarkSet(learner, many)!.questions).toHaveLength(10);
+  });
+
+  it("shapes sets by persona: scaffolds by style, size by pace, boost by challenge", () => {
+    const base = defaultLearner("Rafi");
+    expect(paceSetSize("slow")).toBe(3);
+    expect(paceSetSize("steady")).toBe(5);
+    expect(paceSetSize("fast")).toBe(7);
+
+    const slow = buildAdaptivePracticeSet({ ...base, pace: "slow" }, "math-equations", []);
+    expect(slow.questions).toHaveLength(3);
+    const fast = buildAdaptivePracticeSet({ ...base, pace: "fast" }, "math-equations", []);
+    expect(fast.questions).toHaveLength(7);
+
+    const examples = buildAdaptivePracticeSet({ ...base, preferredStyle: "examples-first" }, "math-equations", []);
+    expect(examples.questions.every((q) => (q.workedExample ?? "").length > 0)).toBe(true);
+    const visual = buildAdaptivePracticeSet({ ...base, preferredStyle: "visual" }, "math-equations", []);
+    expect(visual.questions.every((q) => (q.drawPrompt ?? "").length > 0)).toBe(true);
+    const steps = buildAdaptivePracticeSet({ ...base, preferredStyle: "step-by-step" }, "math-equations", []);
+    expect(steps.questions.every((q) => (q.hint2 ?? "").length > 0)).toBe(true);
+
+    const boosted = personaFromLearner({ ...base, preferredStyle: "challenge" });
+    expect(boosted.difficulty).toBe(Math.min(3, personaFromLearner(base).difficulty + 1));
+    expect(personaFromLearner(base).difficulty).toBe(2);
+
+    const shaped = shapeQuestionForPersona(slow.questions[0]!, personaFromLearner({ ...base, preferredStyle: "visual" }));
+    expect(shaped.drawPrompt).toBeDefined();
+    expect(shaped.question).toBe(slow.questions[0]!.question); // scaffolds never edit the question
   });
 
   it("summarizes results for the progress view", () => {

@@ -29,6 +29,12 @@ export const PracticeQuestionSchema = z.object({
   /** Canonical correct answer as text (the numeric value for typed questions). */
   answer: z.string().min(1).max(160),
   hint: z.string().min(1).max(300),
+  /** Second-step hint, revealed after the first (step-by-step persona). */
+  hint2: z.string().min(1).max(300).optional(),
+  /** Worked mini-example shown before answering (examples-first persona). */
+  workedExample: z.string().min(1).max(400).optional(),
+  /** "Draw it first" prompt (visual persona). */
+  drawPrompt: z.string().min(1).max(200).optional(),
   explanation: z.string().min(1).max(400),
   difficulty: z.union([z.literal(1), z.literal(2), z.literal(3)]),
 });
@@ -57,6 +63,73 @@ export const PracticeResultSchema = z.object({
 export type PracticeResult = z.infer<typeof PracticeResultSchema>;
 
 export const PRACTICE_SET_SIZE = 5;
+
+/* ---------------- learner persona ---------------- */
+
+/**
+ * Practice is shaped by the learner's persona (mirrors homework):
+ * style adds scaffolds, pace sets the set size, and "challenge me"
+ * raises generation difficulty one notch above the behavior baseline.
+ */
+export interface PracticePersona {
+  style: LearnerProfile["preferredStyle"];
+  pace: LearnerProfile["pace"];
+  difficulty: 1 | 2 | 3;
+}
+
+export function personaFromLearner(learner: LearnerProfile): PracticePersona {
+  const base = adaptLearner(learner).difficulty;
+  return {
+    style: learner.preferredStyle,
+    pace: learner.pace,
+    difficulty: learner.preferredStyle === "challenge" ? (Math.min(3, base + 1) as 1 | 2 | 3) : base,
+  };
+}
+
+/** Slow & gentle → 3 questions; steady → 5; fast → 7. */
+export function paceSetSize(pace: LearnerProfile["pace"]): number {
+  return pace === "slow" ? 3 : pace === "fast" ? 7 : PRACTICE_SET_SIZE;
+}
+
+const WORKED_EXAMPLES: Record<string, string> = {
+  equation: "Worked example: 2x + 3 = 7 → subtract 3 from both sides: 2x = 4 → divide by 2: x = 2.",
+  "typed-equation": "Worked example: 2x + 3 = 7 → subtract 3 from both sides: 2x = 4 → divide by 2: x = 2.",
+  lcm: "Worked example: LCM of 4 and 6 — multiples of 6 are 6, 12… 4 divides 12, so LCM = 12.",
+  "typed-lcm": "Worked example: LCM of 4 and 6 — multiples of 6 are 6, 12… 4 divides 12, so LCM = 12.",
+  hcf: "Worked example: HCF of 8 and 12 — factors of 8: 1, 2, 4, 8; of 12: 1, 2, 3, 4, 6, 12. Biggest shared = 4.",
+  "fraction-add": "Worked example: 1/2 + 1/4 → make both quarters: 2/4 + 1/4 = 3/4.",
+  "typed-fraction": "Worked example: 1/2 + 1/4 → make both quarters: 2/4 + 1/4 = 3/4.",
+  evaluate: "Worked example: if x = 3, then 2x + 1 = 2 × 3 + 1 = 7.",
+  percent: "Worked example: 25% of 80 → 80 ÷ 100 = 0.8, then 0.8 × 25 = 20.",
+  mean: "Worked example: mean of 2, 4, 6 → (2 + 4 + 6) ÷ 3 = 12 ÷ 3 = 4.",
+};
+
+const SECOND_HINTS: Record<string, string> = {
+  equation: "Next step: whatever you did to one side, do exactly the same to the other side.",
+  "typed-equation": "Next step: whatever you did to one side, do exactly the same to the other side.",
+  "fraction-add": "Next step: only the top numbers change — the bottom stays the common denominator.",
+  "typed-fraction": "Next step: only the top numbers change — the bottom stays the common denominator.",
+  area: "Next step: multiply the two side lengths — do not add them.",
+  perimeter: "Next step: there are two lengths and two widths — count all four sides.",
+};
+
+/** Adds persona scaffolds to a generated question (pure decoration). */
+export function shapeQuestionForPersona(q: PracticeQuestion, persona: PracticePersona): PracticeQuestion {
+  const shaped = { ...q };
+  if (persona.style === "examples-first") {
+    shaped.workedExample =
+      WORKED_EXAMPLES[q.kind] ??
+      `Worked example: read the question slowly, name what it asks for, then pick the method that finds it.`;
+  }
+  if (persona.style === "visual") {
+    shaped.drawPrompt = "Draw it first: sketch the problem (shapes, a balance, or a number line) before you answer.";
+  }
+  if (persona.style === "step-by-step") {
+    shaped.hint2 =
+      SECOND_HINTS[q.kind] ?? "Break it into two smaller steps — do only the first step now.";
+  }
+  return shaped;
+}
 
 /* ---------------- seeded RNG (deterministic per set) ---------------- */
 
@@ -671,14 +744,19 @@ export function buildPracticeSet(
 export function buildMixedPracticeSet(
   learner: LearnerProfile,
   now: Date = new Date(),
-  count = PRACTICE_SET_SIZE,
+  count?: number,
 ): PracticeSet {
-  const difficulty = adaptLearner(learner).difficulty;
+  const persona = personaFromLearner(learner);
+  const size = count ?? paceSetSize(persona.pace);
+  const difficulty = persona.difficulty;
   const seed = `mix|d${difficulty}|${now.toDateString()}`;
   const r = createRng(seed);
-  const topics = shuffle(r, allTopics(learner.classLevel)).slice(0, count);
+  const topics = shuffle(r, allTopics(learner.classLevel)).slice(0, size);
   const questions = topics.map((topic, i) =>
-    toQuestion(seed, i, topic, difficulty, buildOne(r, learner.classLevel, topic, difficulty, i)),
+    shapeQuestionForPersona(
+      toQuestion(seed, i, topic, difficulty, buildOne(r, learner.classLevel, topic, difficulty, i)),
+      persona,
+    ),
   );
   return PracticeSetSchema.parse({
     id: seed,
@@ -698,8 +776,10 @@ export function buildMixedPracticeSet(
 export function buildReviewPracticeSet(
   learner: LearnerProfile,
   pastResults: PracticeResult[],
-  count = PRACTICE_SET_SIZE,
+  count?: number,
 ): PracticeSet | null {
+  const persona = personaFromLearner(learner);
+  const size = count ?? paceSetSize(persona.pace);
   const topics = allTopics(learner.classLevel);
   const byId = new Map(topics.map((t) => [t.id, t]));
   const candidates: Topic[] = [];
@@ -707,7 +787,7 @@ export function buildReviewPracticeSet(
     const topic = byId.get(id);
     if (topic && !candidates.includes(topic)) candidates.push(topic);
   }
-  if (candidates.length < count) {
+  if (candidates.length < size) {
     const scored = new Map<string, { right: number; total: number }>();
     for (const res of pastResults) {
       const entry = scored.get(res.topicId) ?? { right: 0, total: 0 };
@@ -721,18 +801,23 @@ export function buildReviewPracticeSet(
     for (const [id] of weakest) {
       const topic = byId.get(id);
       if (topic && !candidates.includes(topic)) candidates.push(topic);
-      if (candidates.length >= count) break;
+      if (candidates.length >= size) break;
     }
   }
   if (candidates.length === 0) return null;
-  const difficulty = adaptLearner(learner).difficulty;
+  const difficulty = persona.difficulty;
   const variant = pastResults.filter((r) => r.topicId === "review").length;
   const seed = `review|d${difficulty}|v${variant}`;
   const r = createRng(seed);
   const questions: PracticeQuestion[] = [];
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 0; i < size; i += 1) {
     const topic = candidates[i % candidates.length]!;
-    questions.push(toQuestion(seed, i, topic, difficulty, buildOne(r, learner.classLevel, topic, difficulty, i)));
+    questions.push(
+      shapeQuestionForPersona(
+        toQuestion(seed, i, topic, difficulty, buildOne(r, learner.classLevel, topic, difficulty, i)),
+        persona,
+      ),
+    );
   }
   return PracticeSetSchema.parse({
     id: seed,
@@ -753,12 +838,19 @@ export function buildAdaptivePracticeSet(
   topicId: string,
   pastResults: PracticeResult[],
 ): PracticeSet {
-  const difficulty = adaptLearner(learner).difficulty;
+  const persona = personaFromLearner(learner);
   // Results carry canonical ids (c6-math-equations); accept bare keys here.
   const variant = pastResults.filter(
     (r) => r.topicId === topicId || r.topicId.endsWith(`-${topicId}`),
   ).length;
-  return buildPracticeSet(learner.classLevel, topicId, difficulty, PRACTICE_SET_SIZE, variant);
+  const set = buildPracticeSet(
+    learner.classLevel,
+    topicId,
+    persona.difficulty,
+    paceSetSize(persona.pace),
+    variant,
+  );
+  return { ...set, questions: set.questions.map((q) => shapeQuestionForPersona(q, persona)) };
 }
 
 /**
