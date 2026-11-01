@@ -3,6 +3,11 @@ import { assertValidMission, PUZZLE_QUEST_MISSIONS, type Mission } from "./missi
 import { toClientChallenge } from "./challenges";
 import type { GameSessionController } from "./session";
 import { GameEngineError, type GameChallenge } from "./types";
+import { AdaptiveDifficulty } from "./adaptive";
+import { resolveChallengeContext, type ChallengeContext } from "./lesson-context";
+import { createClass6MathMisconceptionRegistry, MisconceptionTracker } from "./misconceptions";
+import { SessionPerformance } from "./performance";
+import { recommend } from "./recommendations";
 
 /**
  * Server-side Puzzle Quest service (Step 02).
@@ -21,6 +26,11 @@ import { GameEngineError, type GameChallenge } from "./types";
 interface ServerSession {
   controller: GameSessionController;
   missionId: string;
+  /** Step 03 learning engines — session-only, discarded with the session. */
+  performance: SessionPerformance;
+  adaptive: AdaptiveDifficulty;
+  misconceptions: MisconceptionTracker;
+  hintsByChallenge: Map<string, number>;
 }
 
 const engine = createGameEngine();
@@ -33,13 +43,24 @@ const sessions = new Map<string, ServerSession>();
 
 export interface ClientMission extends Omit<Mission, "challengeIds"> {
   challenges: GameChallenge[];
+  /** Step 03 lesson/curriculum context per challenge (no answer data). */
+  contexts: Record<string, ChallengeContext>;
+}
+
+function toClientMission(bundle: (typeof PUZZLE_QUEST_MISSIONS)[number]): ClientMission {
+  const contexts: Record<string, ChallengeContext> = {};
+  for (const challenge of bundle.challenges) {
+    contexts[challenge.id] = resolveChallengeContext({
+      challenge: toClientChallenge(challenge),
+      missionTitle: bundle.mission.title,
+      hintLevels: challenge.hints?.length ?? 0,
+    });
+  }
+  return { ...bundle.mission, challenges: bundle.challenges.map(toClientChallenge), contexts };
 }
 
 export function listClientMissions(): ClientMission[] {
-  return PUZZLE_QUEST_MISSIONS.map(({ mission, challenges }) => ({
-    ...mission,
-    challenges: challenges.map(toClientChallenge),
-  }));
+  return PUZZLE_QUEST_MISSIONS.map(toClientMission);
 }
 
 export function startMissionSession(missionId: string): { sessionId: string; mission: ClientMission } {
@@ -48,10 +69,17 @@ export function startMissionSession(missionId: string): { sessionId: string; mis
   // Runtime session over exactly this mission's ordered challenges.
   const ordered = engine.runtime.createSessionForChallenges(bundle.mission.gameId, bundle.mission.challengeIds);
   ordered.start();
-  sessions.set(ordered.getSession().id, { controller: ordered, missionId });
+  sessions.set(ordered.getSession().id, {
+    controller: ordered,
+    missionId,
+    performance: new SessionPerformance(),
+    adaptive: new AdaptiveDifficulty(bundle.challenges[0]?.difficulty ?? 1),
+    misconceptions: new MisconceptionTracker(createClass6MathMisconceptionRegistry()),
+    hintsByChallenge: new Map(),
+  });
   return {
     sessionId: ordered.getSession().id,
-    mission: { ...bundle.mission, challenges: bundle.challenges.map(toClientChallenge) },
+    mission: toClientMission(bundle),
   };
 }
 
@@ -62,9 +90,44 @@ function getController(sessionId: string): GameSessionController {
 }
 
 export function submitMissionAnswer(sessionId: string, challengeId: string, answer: unknown) {
-  const controller = getController(sessionId);
+  const entry = sessions.get(sessionId);
+  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const controller = entry.controller;
+  const challenge = engine.challenges.getServer(challengeId);
   const outcome = controller.attemptAnswer(challengeId, answer, 2);
   const state = controller.getSession().state;
+
+  // Step 03 learning engines: session-only evidence, adaptation,
+  // misconception patterns, and an explainable recommendation.
+  const misconception = outcome.correct ? null : entry.misconceptions.observe(challenge, answer);
+  if (outcome.recorded) {
+    entry.performance.record({
+      challengeId,
+      mechanicId: challenge.mechanicId,
+      correct: outcome.correct,
+      attemptsUsed: outcome.attemptsUsed,
+      hintsUsed: entry.hintsByChallenge.get(challengeId) ?? 0,
+      difficulty: challenge.difficulty ?? 1,
+      learningObjective: challenge.learningObjective,
+      at: new Date().toISOString(),
+    });
+  }
+  const snapshot = entry.performance.snapshot();
+  const adaptation = outcome.recorded ? entry.adaptive.evaluate(snapshot) : null;
+  const context = resolveChallengeContext({ challenge, missionTitle: entry.missionId, hintLevels: challenge.hints?.length ?? 0 });
+  const recommendation = outcome.recorded
+    ? recommend({
+        lastRecordedCorrect: outcome.correct,
+        snapshot,
+        adaptation: adaptation ?? { difficulty: entry.adaptive.difficulty, changed: false, reason: "" },
+        misconception,
+        topicId: challenge.topicId,
+        prerequisites: context.prerequisites,
+        currentDifficulty: challenge.difficulty ?? 1,
+        sessionCompleted: state.status === "completed",
+      })
+    : null;
+
   return {
     ...outcome,
     progress: {
@@ -74,11 +137,18 @@ export function submitMissionAnswer(sessionId: string, challengeId: string, answ
       status: state.status,
     },
     result: state.status === "completed" ? controller.result() : null,
+    adaptation,
+    misconception,
+    recommendation,
   };
 }
 
 export function requestMissionHint(sessionId: string, challengeId: string) {
-  return getController(sessionId).requestProgressiveHint(challengeId);
+  const entry = sessions.get(sessionId);
+  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const result = entry.controller.requestProgressiveHint(challengeId);
+  entry.hintsByChallenge.set(challengeId, (entry.hintsByChallenge.get(challengeId) ?? 0) + 1);
+  return result;
 }
 
 export function pauseMissionSession(sessionId: string) {

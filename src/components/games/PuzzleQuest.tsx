@@ -17,6 +17,9 @@ interface AnswerOutcome {
   explanation?: string;
   progress: { answered: number; total: number; currentChallengeId: string | null; status: string };
   result: GameResult | null;
+  adaptation?: { difficulty: number; reason: string } | null;
+  misconception?: { supportiveExplanation: string } | null;
+  recommendation?: { kind: string; message: string; reason: string } | null;
 }
 
 type Stage = "landing" | "intro" | "playing" | "results";
@@ -40,6 +43,7 @@ export function PuzzleQuest() {
   const [busy, setBusy] = useState(false);
   const [paused, setPaused] = useState(false);
   const [result, setResult] = useState<GameResult | null>(null);
+  const [guidance, setGuidance] = useState<{ text: string; level: number | null } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +87,7 @@ export function PuzzleQuest() {
       setAnswered(0);
       setResult(null);
       setPaused(false);
+      setGuidance(null);
       resetAnswerInputs();
       setStage("playing");
     } catch {
@@ -123,6 +128,7 @@ export function PuzzleQuest() {
         return;
       }
       setFeedback({ kind: outcome.correct ? "good" : "done", text: outcome.explanation ?? "" });
+      setGuidance(outcome.recommendation ? { text: outcome.recommendation.message, level: outcome.adaptation?.difficulty ?? null } : null);
       setCurrentId(outcome.progress.currentChallengeId);
       setAnswer("");
       setSelected(null);
@@ -230,6 +236,17 @@ export function PuzzleQuest() {
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-edge" role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={total}>
           <div className="h-full bg-flame transition-all" style={{ width: `${total ? (answered / total) * 100 : 0}%` }} />
         </div>
+        {guidance ? (
+          <p className="mt-3 rounded-xl bg-lagoon-soft px-3 py-2 text-sm text-ink" role="status">
+            {guidance.level ? <strong>{pick(lang, `Practice level ${guidance.level}. `, `অনুশীলনের স্তর ${guidance.level}। `)}</strong> : null}{guidance.text}
+          </p>
+        ) : null}
+        {mission.contexts[challenge.id]?.curriculum ? (
+          <p className="mt-2 text-xs text-ink-muted">
+            {mission.contexts[challenge.id]?.curriculum?.chapterTitle} · {mission.contexts[challenge.id]?.curriculum?.topicTitle}
+            {mission.contexts[challenge.id]?.curriculum?.approvalStatus === "verified" ? pick(lang, " · NCTB textbook", " · NCTB পাঠ্যবই") : ""}
+          </p>
+        ) : null}
         {paused ? (
           <p className="mt-6 text-center text-sm font-semibold text-ink-soft">{pick(lang, "Paused. Take a breath — your quest is waiting.", "বিরতি। একটু বিশ্রাম নাও — তোমার অভিযান অপেক্ষা করছে।")}</p>
         ) : (

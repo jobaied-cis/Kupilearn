@@ -178,7 +178,7 @@ export const FIRST_STEPS_MISSION: MissionBundle = {
       id: "pq1-build", gameId: "puzzle-quest", mechanicId: "drag-build", type: "drag-build",
       topicId: "c6-math-algebraic", grade: 6, subjectId: "math",
       prompt: "Build the equation that says: three plus four makes seven.",
-      payload: { difficulty: 2, tiles: ["4", "=", "3", "+", "7"], instruction: "Arrange the tiles to build 3 + 4 = 7" },
+      payload: { difficulty: 2, tiles: ["4", "=", "3", "+", "7"], instruction: "Arrange the tiles to build the equation that says three plus four", buildKind: "equation" },
       difficulty: 2, learningObjective: "Build a correct equation from parts", stage: "final",
       status: "approved", answerKey: ["3", "+", "4", "=", "7"], points: 15,
       hints: [

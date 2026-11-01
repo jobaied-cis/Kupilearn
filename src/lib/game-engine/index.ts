@@ -18,6 +18,12 @@ export * from "./ai";
 export * from "./puzzle-quest";
 export * from "./mechanics/index";
 export * from "./missions";
+export * from "./curriculum-context";
+export * from "./lesson-context";
+export * from "./performance";
+export * from "./adaptive";
+export * from "./misconceptions";
+export * from "./recommendations";
 
 /**
  * Assemble the engine: Puzzle Quest registered in `development`, its
