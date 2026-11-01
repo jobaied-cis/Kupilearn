@@ -2,6 +2,7 @@ import { GameDirector, type DirectorAction, type DirectorResponse } from "./dire
 import { createMetaGameAiAdapter, SessionThrottle, type MetaGameAiAdapter } from "./meta-adapter";
 import { getDirectorContext } from "./server";
 import { GameEngineError } from "./types";
+import { gameErrorStatus } from "./http";
 
 /**
  * Session-scoped AI service (Step 04) — SERVER ONLY.
@@ -41,6 +42,12 @@ export function createAiService(deps: AiServiceDeps = {}) {
     if (!entry) {
       entry = { director: new GameDirector({ ai, throttle: new SessionThrottle() }), history: [] };
       sessions.set(sessionId, entry);
+      // Bounded cleanup (Step 06): drop oldest AI session state first.
+      while (sessions.size > 200) {
+        const oldest = sessions.keys().next().value as string | undefined;
+        if (oldest === undefined || oldest === sessionId) break;
+        sessions.delete(oldest);
+      }
     }
     return entry;
   }
@@ -104,8 +111,6 @@ export function getAiService(): AiService {
 }
 
 export function aiErrorStatus(error: unknown): number {
-  if (error instanceof GameEngineError) {
-    return error.code === "SESSION_NOT_FOUND" || error.code === "CHALLENGE_NOT_FOUND" ? 404 : 400;
-  }
+  if (error instanceof GameEngineError) return gameErrorStatus(error);
   return 500;
 }

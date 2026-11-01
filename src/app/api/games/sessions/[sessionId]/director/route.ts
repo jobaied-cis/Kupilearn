@@ -1,5 +1,6 @@
 import { aiErrorStatus, getAiService } from "@/lib/game-engine/ai-service";
 import { DIRECTOR_ACTIONS, type DirectorAction } from "@/lib/game-engine/director";
+import { parseJsonBody } from "@/lib/game-engine/http";
 
 /**
  * POST /api/games/sessions/[sessionId]/director
@@ -12,7 +13,7 @@ import { DIRECTOR_ACTIONS, type DirectorAction } from "@/lib/game-engine/directo
 export async function POST(request: Request, { params }: { params: Promise<{ sessionId: string }> }): Promise<Response> {
   try {
     const { sessionId } = await params;
-    const body = (await request.json()) as {
+    const body = (await parseJsonBody(request)) as {
       action?: unknown;
       challengeId?: unknown;
       personaId?: unknown;
@@ -39,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ses
   } catch (error) {
     const status = aiErrorStatus(error);
     return Response.json(
-      { error: status === 404 ? "NOT_FOUND" : "AI_UNAVAILABLE", detail: error instanceof Error ? error.message : "AI help failed" },
+      { error: status === 404 ? "NOT_FOUND" : status === 413 ? "PAYLOAD_TOO_LARGE" : status === 400 ? "INVALID_REQUEST" : "AI_UNAVAILABLE", detail: error instanceof Error ? error.message : "AI help failed" },
       { status },
     );
   }

@@ -35,6 +35,31 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Game Engine & Puzzle Quest (Steps 01–06)
+
+`src/lib/game-engine/` implements the reusable game engine, Puzzle Quest
+with six deterministic mechanics, the Learning & Adaptive Engine, the
+Meta-only AI Game Director (AI Teacher + three AI classmates), and the
+Rewards & Progress Engine. Play it at `/dashboard/games`.
+
+- Commands: `npm run dev` (develop), `npm run build` + `npm run start`
+  (production), `npm test` (Vitest), `npm run lint`.
+- Meta AI (optional, server-side only): set `META_API_KEY` in
+  `.env.local` (see `.env.example` for placeholders only) with
+  `LLM_PROVIDER=meta`. Models: teacher `muse-wonder-1.0`, classmate
+  `muse-spark-1.3` at `https://api.meta.ai/v1`. Without a key, AI help
+  deterministically falls back to built-in hints/explanations and is
+  labelled as such — the game works fully without AI. Live Meta has
+  not been verified in CI (no credentials there).
+- Progress and rewards are **session-only** (in-memory server state,
+  labelled in UI/API). Persistent learner records stay behind the
+  project's legal-review gate (`REVISION_PERSIST_LEARNER_DATA`) and
+  are not enabled by the game engine.
+- Production blockers before a public launch: configure and
+  live-verify `META_API_KEY`; complete a real-browser end-to-end
+  pass; decide on approved persistent progress storage; address the
+  moderate dependency advisories reported by `npm audit`.
+
 ## Curriculum Engine (CBSE / NCERT, Classes 6–10)
 
 `src/lib/curriculum/` implements the prerequisite-aware lesson engine:

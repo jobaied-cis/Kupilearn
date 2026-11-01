@@ -30,6 +30,7 @@ export * from "./meta-adapter";
 export * from "./director";
 export * from "./rewards";
 export * from "./progress";
+export * from "./http";
 
 /**
  * Assemble the engine: Puzzle Quest registered in `development`, its

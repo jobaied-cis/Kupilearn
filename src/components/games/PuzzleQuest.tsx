@@ -7,8 +7,8 @@ import type { GameChallenge, GameResult } from "../../lib/game-engine/types";
 import type { ClientMission } from "../../lib/game-engine/server";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
-const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60";
-const BTN_GHOST = "inline-flex items-center gap-1.5 rounded-full border-2 border-paper-edge bg-paper px-3 py-1.5 text-sm font-bold text-ink disabled:opacity-60";
+const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink motion-reduce:transition-none";
+const BTN_GHOST = "inline-flex items-center gap-1.5 rounded-full border-2 border-paper-edge bg-paper px-3 py-1.5 text-sm font-bold text-ink disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink";
 
 interface GameProgress {
   missionsCompleted: string[];
@@ -318,7 +318,7 @@ export function PuzzleQuest() {
           <button type="button" className={BTN_GHOST} onClick={() => void togglePause()}>{paused ? pick(lang, "Resume", "আবার শুরু") : pick(lang, "Pause", "বিরতি")}</button>
         </div>
         <div className="mt-2 h-2 overflow-hidden rounded-full bg-paper-edge" role="progressbar" aria-valuenow={answered} aria-valuemin={0} aria-valuemax={total}>
-          <div className="h-full bg-flame transition-all" style={{ width: `${total ? (answered / total) * 100 : 0}%` }} />
+          <div className="h-full bg-flame transition-all motion-reduce:transition-none" style={{ width: `${total ? (answered / total) * 100 : 0}%` }} />
         </div>
         {guidance ? (
           <p className="mt-3 rounded-xl bg-lagoon-soft px-3 py-2 text-sm text-ink" role="status">

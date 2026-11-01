@@ -56,6 +56,25 @@ for (const bundle of PUZZLE_QUEST_MISSIONS) {
 
 const sessions = new Map<string, ServerSession>();
 
+/**
+ * Session cleanup (Step 06): in-memory sessions are bounded. When the
+ * cap is exceeded the oldest sessions are dropped (their results and
+ * progress records are unaffected — those live in their own stores).
+ */
+export const MAX_GAME_SESSIONS = 200;
+
+export function pruneSessions(): void {
+  while (sessions.size > MAX_GAME_SESSIONS) {
+    const oldest = sessions.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    sessions.delete(oldest);
+  }
+}
+
+export function activeSessionCount(): number {
+  return sessions.size;
+}
+
 export interface ClientMission extends Omit<Mission, "challengeIds"> {
   challenges: GameChallenge[];
   /** Step 03 lesson/curriculum context per challenge (no answer data). */
@@ -93,6 +112,7 @@ export function startMissionSession(missionId: string, learnerRef = "anonymous-d
     misconceptions: new MisconceptionTracker(createClass6MathMisconceptionRegistry()),
     hintsByChallenge: new Map(),
   });
+  pruneSessions();
   return {
     sessionId: ordered.getSession().id,
     mission: toClientMission(bundle),
