@@ -24,6 +24,10 @@ export * from "./performance";
 export * from "./adaptive";
 export * from "./misconceptions";
 export * from "./recommendations";
+export * from "./personas";
+export * from "./ai-safety";
+export * from "./meta-adapter";
+export * from "./director";
 
 /**
  * Assemble the engine: Puzzle Quest registered in `development`, its

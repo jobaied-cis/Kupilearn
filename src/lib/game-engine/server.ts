@@ -143,6 +143,30 @@ export function submitMissionAnswer(sessionId: string, challengeId: string, answ
   };
 }
 
+/**
+ * Minimal trusted context for the AI Game Director (Step 04): the
+ * active challenge (server shape), its curriculum/lesson context,
+ * and session-only performance evidence. No identity or personal
+ * data exists in a session to begin with, so none can leak here.
+ */
+export function getDirectorContext(sessionId: string, challengeId: string) {
+  const entry = sessions.get(sessionId);
+  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const challenge = engine.challenges.getServer(challengeId);
+  const bundle = PUZZLE_QUEST_MISSIONS.find((b) => b.mission.id === entry.missionId);
+  return {
+    mission: bundle?.mission ?? null,
+    challenge,
+    clientChallenge: toClientChallenge(challenge),
+    context: resolveChallengeContext({ challenge, missionTitle: bundle?.mission.title ?? "", hintLevels: challenge.hints?.length ?? 0 }),
+    performance: entry.performance.snapshot(),
+    difficulty: entry.adaptive.difficulty,
+    hintsUsedForChallenge: entry.hintsByChallenge.get(challengeId) ?? 0,
+    state: entry.controller.getSession().state,
+    result: entry.controller.result(),
+  };
+}
+
 export function requestMissionHint(sessionId: string, challengeId: string) {
   const entry = sessions.get(sessionId);
   if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);

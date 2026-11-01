@@ -44,6 +44,10 @@ export function PuzzleQuest() {
   const [paused, setPaused] = useState(false);
   const [result, setResult] = useState<GameResult | null>(null);
   const [guidance, setGuidance] = useState<{ text: string; level: number | null } | null>(null);
+  const [aiPersona, setAiPersona] = useState("ai-teacher");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiTurns, setAiTurns] = useState<{ personaName: string; text: string; source: string }[]>([]);
+  const [aiNote, setAiNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -152,6 +156,27 @@ export function PuzzleQuest() {
       const data = (await res.json()) as { hint: string | null; level: number; total: number };
       if (data.hint) setHint({ text: data.hint, level: data.level, total: data.total });
     } catch { /* hints are optional help; the game continues without one */ }
+  }
+
+  async function askAi(action: string) {
+    if (!sessionId || !challenge || aiBusy) return;
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const res = await fetch(`/api/games/sessions/${sessionId}/director`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, challengeId: challenge.id, personaId: aiPersona, lang }),
+      });
+      const data = (await res.json()) as { personaName: string; text: string; question?: string; source: string; detail?: string };
+      if (!res.ok) throw new Error(data.detail ?? "failed");
+      setAiTurns((turns) => [...turns.slice(-9), { personaName: data.personaName, text: data.question ? `${data.text} ${data.question}` : data.text, source: data.source }]);
+      if (data.source === "offline") setAiNote(pick(lang, "AI is offline right now — this is built-in help, and the game works the same.", "AI এখন অফলাইন — এটি বিল্ট-ইন সাহায্য, খেলা একইভাবে চলবে।"));
+    } catch {
+      setAiNote(pick(lang, "AI help could not load. The hints button above always works.", "AI সাহায্য লোড করা যায়নি। উপরের সূত্র বোতাম সবসময় কাজ করে।"));
+    } finally {
+      setAiBusy(false);
+    }
   }
 
   async function togglePause() {
@@ -270,6 +295,38 @@ export function PuzzleQuest() {
               <button type="button" className={BTN_GHOST} onClick={() => void askHint()}>
                 <Icon name="lightbulb" className="size-4" />{pick(lang, "Hint", "সূত্র")}
               </button>
+            </div>
+
+            {/* AI Teacher & Classmates (Step 04) — fictional AI personas */}
+            <div className="mt-5 rounded-xl border border-paper-edge bg-paper p-3">
+              <h3 className="text-sm font-bold text-ink">{pick(lang, "AI learning friends", "AI শেখার বন্ধুরা")}</h3>
+              <p className="mt-0.5 text-xs text-ink-muted">{pick(lang, "These are fictional AI characters, not real students or teachers.", "এরা কাল্পনিক AI চরিত্র, আসল শিক্ষার্থী বা শিক্ষক নয়।")}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label={pick(lang, "Choose who to ask", "কাকে জিজ্ঞেস করবে বেছে নাও")}>
+                {[
+                  ["ai-teacher", pick(lang, "AI Teacher", "AI শিক্ষক")],
+                  ["curious-explorer", pick(lang, "Rafi · Curious", "রাফি · কৌতূহলী")],
+                  ["logical-thinker", pick(lang, "Tania · Logical", "তানিয়া · যুক্তিবাদী")],
+                  ["friendly-learner", pick(lang, "Arif · Friendly", "আরিফ · বন্ধুভাবাপন্ন")],
+                ].map(([id, name]) => (
+                  <button key={id} type="button" role="radio" aria-checked={aiPersona === id} onClick={() => setAiPersona(id)} className={`rounded-full border-2 px-2.5 py-1 text-xs font-bold ${aiPersona === id ? "border-ink bg-flame text-night" : "border-paper-edge bg-white text-ink"}`}>{name}</button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi(aiPersona === "ai-teacher" ? "GENERATE_HINT" : "START_CLASSMATE_DISCUSSION")}>{pick(lang, "Ask for a hint", "সূত্র চাও")}</button>
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("EXPLAIN_CONCEPT")}>{pick(lang, "Explain the idea", "ধারণাটি বোঝাও")}</button>
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("ENCOURAGE_LEARNER")}>{pick(lang, "Encourage me", "উৎসাহ দাও")}</button>
+              </div>
+              {aiBusy ? <p className="mt-2 text-xs text-ink-muted" role="status">{pick(lang, "Thinking…", "ভাবছে…")}</p> : null}
+              {aiNote ? <p className="mt-2 text-xs font-semibold text-ink-soft" role="status">{aiNote}</p> : null}
+              {aiTurns.length > 0 ? (
+                <ul className="mt-2 flex flex-col gap-1.5" aria-label={pick(lang, "AI conversation in this session", "এই সেশনে AI কথোপকথন")}>
+                  {aiTurns.map((turn, i) => (
+                    <li key={i} className="rounded-lg bg-white px-2.5 py-2 text-sm text-ink">
+                      <strong className="text-xs text-ink-muted">{turn.personaName}{turn.source === "offline" ? pick(lang, " · built-in help", " · বিল্ট-ইন সাহায্য") : ""}: </strong>{turn.text}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           </>
         )}
