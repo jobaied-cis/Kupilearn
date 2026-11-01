@@ -16,6 +16,7 @@ export const PUZZLE_QUEST_MECHANIC_IDS = [
   "fraction-puzzle",
   "shape-puzzle",
   "logic-puzzle",
+  "drag-build",
 ] as const;
 
 export const PUZZLE_QUEST_DEFINITION: GameDefinition = {

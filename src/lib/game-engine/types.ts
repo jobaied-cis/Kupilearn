@@ -69,6 +69,11 @@ export interface GameChallenge {
   /** Opaque, mechanic-defined rendering payload. Contains NO answer key. */
   payload: Record<string, unknown>;
   hint?: string;
+  /** 1 (warm-up) .. 3 (stretch). Safe to show. */
+  difficulty?: 1 | 2 | 3;
+  learningObjective?: string;
+  /** Position inside a mission flow. Safe to show. */
+  stage?: "warmup" | "main" | "final";
   status: "draft" | "approved";
 }
 
@@ -77,6 +82,10 @@ export interface ServerChallenge extends GameChallenge {
   answerKey: unknown;
   /** Trusted scoring weight, applied server-side only. */
   points: number;
+  /** Progressive hints (clue → strategy → guided explanation), served one level at a time. */
+  hints?: string[];
+  /** Concept explanation shown after a final answer. Server-sent only after validation. */
+  explanation?: string;
 }
 
 export type SessionStatus = "idle" | "ready" | "playing" | "paused" | "completed" | "interrupted";

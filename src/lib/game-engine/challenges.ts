@@ -33,8 +33,10 @@ export class ChallengeBank {
 
 /** Strip trusted fields before anything reaches client code. */
 export function toClientChallenge(challenge: ServerChallenge): GameChallenge {
-  const { answerKey: _answerKey, points: _points, ...clientSafe } = challenge;
+  const { answerKey: _answerKey, points: _points, hints: _hints, explanation: _explanation, ...clientSafe } = challenge;
   void _answerKey;
   void _points;
+  void _hints;
+  void _explanation;
   return clientSafe;
 }

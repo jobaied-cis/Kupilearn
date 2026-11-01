@@ -52,6 +52,7 @@ import {
 } from "../../lib/homework/engine";
 import { addAssignment, loadAssignments, saveAssignments } from "../../lib/homework/store";
 import { RevisionDashboard } from "../revision/RevisionDashboard";
+import { PuzzleQuest } from "../games/PuzzleQuest";
 import type { DashSection } from "./DashboardShell";
 import { ClassroomFlow } from "../classroom/ClassroomFlow";
 
@@ -1015,6 +1016,7 @@ function GamesView() {
   return (
     <div className="mx-auto max-w-[84rem]">
       <PageHead title={pick(lang, "Games", "গেমস")} sub={pick(lang, "Learn by playing — every game is built from what you are studying.", "খেলতে খেলতে শেখো — প্রতিটি গেম তোমার পড়া থেকেই বানানো।")} />
+      <div className="mb-4"><PuzzleQuest /></div>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {GAMES.map((g) => (
           <li key={g.title.en} className={`${CARD} flex flex-col gap-2 p-4`}>
