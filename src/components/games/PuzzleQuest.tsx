@@ -10,6 +10,18 @@ const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60";
 const BTN_GHOST = "inline-flex items-center gap-1.5 rounded-full border-2 border-paper-edge bg-paper px-3 py-1.5 text-sm font-bold text-ink disabled:opacity-60";
 
+interface GameProgress {
+  missionsCompleted: string[];
+  totalXp: number;
+  challengesAnswered: number;
+  challengesCorrect: number;
+  objectivesCovered: string[];
+  mechanicsExplored: string[];
+  badgesEarned: string[];
+  persistence: string;
+  sessionsPlayed: number;
+}
+
 interface AnswerOutcome {
   correct: boolean;
   recorded: boolean;
@@ -17,6 +29,7 @@ interface AnswerOutcome {
   explanation?: string;
   progress: { answered: number; total: number; currentChallengeId: string | null; status: string };
   result: GameResult | null;
+  rewards?: { xp: { challengeXp: number; completionXp: number; independentXp: number; total: number }; badges: string[]; totalXp: number; persistence: string } | null;
   adaptation?: { difficulty: number; reason: string } | null;
   misconception?: { supportiveExplanation: string } | null;
   recommendation?: { kind: string; message: string; reason: string } | null;
@@ -48,6 +61,34 @@ export function PuzzleQuest() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiTurns, setAiTurns] = useState<{ personaName: string; text: string; source: string }[]>([]);
   const [aiNote, setAiNote] = useState<string | null>(null);
+  const [gameProgress, setGameProgress] = useState<GameProgress | null>(null);
+  const [badgeDefs, setBadgeDefs] = useState<{ id: string; name: string; nameBn: string; description: string; icon: string }[]>([]);
+  const [nextMission, setNextMission] = useState<{ missionId: string | null; reason: string } | null>(null);
+  const [sessionRewards, setSessionRewards] = useState<AnswerOutcome["rewards"]>(null);
+
+  const learnerRef = useCallback((): string => {
+    try {
+      const key = "kupi-game-learner";
+      let ref = window.localStorage.getItem(key);
+      if (!ref) {
+        ref = `learner-${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage.setItem(key, ref);
+      }
+      return ref;
+    } catch {
+      return "anonymous-device";
+    }
+  }, []);
+
+  const loadProgress = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/games/progress?learnerRef=${encodeURIComponent(learnerRef())}`);
+      const data = (await res.json()) as { progress: GameProgress; badges: typeof badgeDefs; nextMission: { missionId: string | null; reason: string } };
+      setGameProgress(data.progress);
+      setBadgeDefs(data.badges);
+      setNextMission(data.nextMission);
+    } catch { /* progress is a summary; the game itself never depends on it */ }
+  }, [learnerRef]);
 
   const load = useCallback(async () => {
     try {
@@ -55,10 +96,11 @@ export function PuzzleQuest() {
       const res = await fetch("/api/games/missions");
       const data = (await res.json()) as { missions: ClientMission[] };
       setMissions(data.missions);
+      void loadProgress();
     } catch {
       setLoadFailed(true);
     }
-  }, []);
+  }, [loadProgress]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => void load());
@@ -82,7 +124,7 @@ export function PuzzleQuest() {
       const res = await fetch("/api/games/sessions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ missionId: selectedMission.id }),
+        body: JSON.stringify({ missionId: selectedMission.id, learnerRef: learnerRef() }),
       });
       const data = (await res.json()) as { sessionId: string; mission: ClientMission };
       setMission(data.mission);
@@ -128,6 +170,8 @@ export function PuzzleQuest() {
       }
       if (outcome.result) {
         setResult(outcome.result);
+        setSessionRewards(outcome.rewards ?? null);
+        void loadProgress();
         setStage("results");
         return;
       }
@@ -218,6 +262,21 @@ export function PuzzleQuest() {
           ))}
         </dl>
         <p className="mt-3 text-sm text-ink-soft">{pick(lang, "Well done for finishing every challenge. Try the quest again any time to practise more.", "প্রতিটি চ্যালেঞ্জ শেষ করার জন্য শাবাশ। আরও অনুশীলনের জন্য যেকোনো সময় আবার খেলো।")}</p>
+        {mission && mission.learningObjectives.length > 0 ? (
+          <p className="mt-2 text-sm text-ink-soft"><strong className="text-ink">{pick(lang, "You practised: ", "তুমি অনুশীলন করেছ: ")}</strong>{mission.learningObjectives.join(" · ")}</p>
+        ) : null}
+        {sessionRewards ? (
+          <div className="mt-3 rounded-xl bg-marigold-soft px-3 py-2 text-sm text-ink">
+            <strong>{pick(lang, `+${sessionRewards.xp.total} XP`, `+${sessionRewards.xp.total} XP`)}</strong>
+            {pick(lang, ` (${sessionRewards.xp.challengeXp} for correct challenges, ${sessionRewards.xp.completionXp} for finishing${sessionRewards.xp.independentXp ? `, ${sessionRewards.xp.independentXp} for the independent final` : ""}). Total so far: ${sessionRewards.totalXp} XP — this progress is kept for this session only.`, ` (সঠিক চ্যালেঞ্জের জন্য ${sessionRewards.xp.challengeXp}, শেষ করার জন্য ${sessionRewards.xp.completionXp}${sessionRewards.xp.independentXp ? `, স্বাধীন ফাইনালের জন্য ${sessionRewards.xp.independentXp}` : ""})। এখন পর্যন্ত মোট: ${sessionRewards.totalXp} XP — এই অগ্রগতি শুধু এই সেশনের জন্য রাখা হয়েছে।`)}
+            {sessionRewards.badges.length > 0 ? (
+              <span className="mt-1 block font-bold">{pick(lang, "New badge: ", "নতুন ব্যাজ: ")}{sessionRewards.badges.map((id) => badgeDefs.find((b) => b.id === id)?.name ?? id).join(", ")}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {mission && nextMission?.missionId === mission.id ? (
+          <p className="mt-2 text-sm text-ink-soft">{pick(lang, "Next step: play this quest again to practise, or explore another game below.", "পরের ধাপ: অনুশীলনের জন্য এই অভিযান আবার খেলো, অথবা নিচের অন্য খেলা দেখো।")}</p>
+        ) : null}
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" className={BTN} onClick={() => mission && void startMission(mission)}>{pick(lang, "Play again", "আবার খেলো")}</button>
           <button type="button" className={BTN_GHOST} onClick={() => setStage("landing")}>{pick(lang, "Back to missions", "মিশনে ফিরে যাও")}</button>
@@ -339,6 +398,35 @@ export function PuzzleQuest() {
       <div className={`${CARD} p-5`}>
         <h2 className="font-display text-xl font-bold text-ink">Puzzle Quest</h2>
         <p className="mt-1 text-sm text-ink-soft">{pick(lang, "Solve curriculum puzzles, one mission at a time. No timers, no pressure — just thinking.", "একটি করে মিশনে পাঠ্যক্রমের ধাঁধা সমাধান করো। কোনো টাইমার নেই, চাপ নেই — শুধু ভাবনা।")}</p>
+        {gameProgress ? (
+          <div className="mt-3">
+            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {[
+                [pick(lang, "XP (this session)", "XP (এই সেশনে)"), String(gameProgress.totalXp)],
+                [pick(lang, "Missions done", "শেষ করা মিশন"), String(gameProgress.missionsCompleted.length)],
+                [pick(lang, "Correct answers", "সঠিক উত্তর"), `${gameProgress.challengesCorrect}/${gameProgress.challengesAnswered}`],
+                [pick(lang, "Badges", "ব্যাজ"), String(gameProgress.badgesEarned.length)],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-paper px-3 py-2">
+                  <dt className="text-[0.75rem] font-semibold text-ink-muted">{label}</dt>
+                  <dd className="font-display text-xl font-bold text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {gameProgress.badgesEarned.length > 0 ? (
+              <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={pick(lang, "Your badges", "তোমার ব্যাজ")}>
+                {gameProgress.badgesEarned.map((id) => {
+                  const badge = badgeDefs.find((b) => b.id === id);
+                  return <li key={id} className="rounded-full bg-jolpai-soft px-2.5 py-1 text-xs font-bold text-ink">{lang === "bn" ? (badge?.nameBn ?? id) : (badge?.name ?? id)}</li>;
+                })}
+              </ul>
+            ) : null}
+            {gameProgress.mechanicsExplored.length > 0 ? (
+              <p className="mt-2 text-xs text-ink-muted">{pick(lang, `Puzzle types explored: ${gameProgress.mechanicsExplored.join(", ")}`, `খেলা ধাঁধার ধরন: ${gameProgress.mechanicsExplored.join(", ")}`)}</p>
+            ) : null}
+            <p className="mt-1 text-xs text-ink-muted">{pick(lang, "Progress is kept for this session on this server only — it is not a permanent record yet.", "অগ্রগতি শুধু এই সেশনের জন্য এই সার্ভারে রাখা হয় — এটি এখনো স্থায়ী রেকর্ড নয়।")}</p>
+          </div>
+        ) : null}
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
         {missions.map((m) => (
@@ -346,7 +434,14 @@ export function PuzzleQuest() {
             <span className="text-xs font-bold text-ink-muted">{pick(lang, `Class ${m.grade} · Mathematics`, `শ্রেণি ${m.grade} · গণিত`)}</span>
             <h3 className="font-display text-lg leading-snug font-bold text-ink">{m.title}</h3>
             <p className="text-sm text-ink-soft">{m.description}</p>
-            {m.contentStatus === "draft-sample" ? <span className="self-start rounded-full bg-marigold-soft px-2 py-0.5 text-[0.7rem] font-bold text-ink">{pick(lang, "Sample mission", "নমুনা মিশন")}</span> : null}
+            <span className="flex flex-wrap gap-1.5">
+              {gameProgress?.missionsCompleted.includes(m.id) ? (
+                <span className="rounded-full bg-jolpai-soft px-2 py-0.5 text-[0.7rem] font-bold text-ink">{pick(lang, "Completed", "সম্পন্ন")}</span>
+              ) : (
+                <span className="rounded-full bg-lagoon-soft px-2 py-0.5 text-[0.7rem] font-bold text-ink">{pick(lang, "Available", "খেলতে পারো")}</span>
+              )}
+              {m.contentStatus === "draft-sample" ? <span className="rounded-full bg-marigold-soft px-2 py-0.5 text-[0.7rem] font-bold text-ink">{pick(lang, "Sample mission", "নমুনা মিশন")}</span> : null}
+            </span>
             <button type="button" className={`${BTN} mt-auto self-start`} onClick={() => { setMission(m); setStage("intro"); }}>
               <Icon name="play" className="size-4" />{pick(lang, "View mission", "মিশন দেখো")}
             </button>

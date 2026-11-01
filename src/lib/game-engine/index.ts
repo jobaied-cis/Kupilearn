@@ -28,6 +28,8 @@ export * from "./personas";
 export * from "./ai-safety";
 export * from "./meta-adapter";
 export * from "./director";
+export * from "./rewards";
+export * from "./progress";
 
 /**
  * Assemble the engine: Puzzle Quest registered in `development`, its

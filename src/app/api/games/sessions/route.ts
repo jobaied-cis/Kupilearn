@@ -4,11 +4,12 @@ import { GameEngineError } from "@/lib/game-engine/types";
 /** POST /api/games/sessions { missionId } - start a mission session (server-scored). */
 export async function POST(request: Request): Promise<Response> {
   try {
-    const body = (await request.json()) as { missionId?: unknown };
+    const body = (await request.json()) as { missionId?: unknown; learnerRef?: unknown };
     if (typeof body.missionId !== "string" || body.missionId.trim() === "") {
       return Response.json({ error: "INVALID_REQUEST", detail: "missionId is required" }, { status: 400 });
     }
-    const { sessionId, mission } = startMissionSession(body.missionId);
+    const learnerRef = typeof body.learnerRef === "string" && body.learnerRef.trim() !== "" ? body.learnerRef.slice(0, 100) : "anonymous-device";
+    const { sessionId, mission } = startMissionSession(body.missionId, learnerRef);
     return Response.json({ sessionId, mission }, { status: 201 });
   } catch (error) {
     if (error instanceof GameEngineError) {
