@@ -1023,7 +1023,7 @@ function GamesView() {
             <span className={`grid size-10 place-items-center rounded-xl border-2 border-ink ${g.chip}`}><Icon name={g.icon} className="size-5" strokeWidth={1.8} /></span>
             <h2 className="font-display text-lg leading-snug font-bold text-ink">{t(lang, g.title)}</h2>
             <p className="text-[0.88rem] text-ink-soft">{t(lang, g.body)}</p>
-            <Link href="/dashboard/practice" className={`${BTN_SM} mt-auto self-start`}><Icon name="play" className="size-4" />{pick(lang, "Play", "খেলো")}</Link>
+            <span aria-disabled="true" className="mt-auto inline-flex cursor-not-allowed items-center gap-1.5 self-start rounded-full border-2 border-paper-edge bg-paper px-3 py-1.5 text-sm font-bold text-ink-muted opacity-70"><Icon name="clock" className="size-4" />{pick(lang, "Coming soon", "শীঘ্রই আসছে")}</span>
           </li>
         ))}
       </ul>

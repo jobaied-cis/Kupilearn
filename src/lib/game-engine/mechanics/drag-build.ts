@@ -23,6 +23,25 @@ export interface DragBuildPayload {
   buildKind?: "equation" | "ordered" | "free";
 }
 
+/** Pure tile-arrangement helpers shared by drag, tap, and keyboard controls. */
+export function insertTile(placed: string[], tile: string, index?: number): string[] {
+  const next = [...placed];
+  next.splice(index === undefined ? next.length : Math.max(0, Math.min(index, next.length)), 0, tile);
+  return next;
+}
+
+export function moveTile(placed: string[], from: number, to: number): string[] {
+  if (from === to || from < 0 || to < 0 || from >= placed.length || to >= placed.length) return [...placed];
+  const next = [...placed];
+  const [tile] = next.splice(from, 1);
+  next.splice(to, 0, tile!);
+  return next;
+}
+
+export function removeTileAt(placed: string[], index: number): string[] {
+  return placed.filter((_, i) => i !== index);
+}
+
 const OPERATORS = new Set(["+", "-", "×", "x", "*", "÷", "/"]);
 
 function numberTile(tile: string): number | null {

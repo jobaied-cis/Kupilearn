@@ -1,3 +1,4 @@
+import { buildClassmatePrompt, buildTeacherPrompt } from "../classroom/personas";
 import { findTopic, getClass } from "../nctb/catalog";
 import { adaptLearner, type Adaptation, type LearnerProfile } from "../learner/adapt";
 import type { LessonQuestion, VizInstruction } from "../lesson/engine";
@@ -48,6 +49,16 @@ export interface LessonContextAdapter {
   questionsFor(classLevel: number, topicId: string): Promise<LessonQuestion[]>;
 }
 
+/** Connected implementation: the existing deterministic lesson engine. */
+export function createLessonContextAdapter(): LessonContextAdapter {
+  return {
+    async questionsFor(classLevel, topicId) {
+      const { offlineLesson } = await import("../lesson/engine");
+      return offlineLesson(classLevel, topicId).questions ?? [];
+    },
+  };
+}
+
 export interface LearnerPreferenceAdapter {
   /** Session-only adaptation from observable signals. Persists nothing. */
   adaptationFor(profile: LearnerProfile): Adaptation;
@@ -57,10 +68,25 @@ export function createLearnerPreferenceAdapter(): LearnerPreferenceAdapter {
   return { adaptationFor: (profile) => adaptLearner(profile) };
 }
 
-/** Prompt-building personas live in lib/classroom/personas (Step 04 wires them). */
+/** Prompt-building personas live in lib/classroom/personas. */
 export interface PersonaPromptAdapter {
   buildTeacherPrompt(args: Parameters<typeof import("../classroom/personas").buildTeacherPrompt>[0]): { prompt: string };
   buildClassmatePrompt(args: Parameters<typeof import("../classroom/personas").buildClassmatePrompt>[0]): { prompt: string };
+}
+
+/**
+ * Connected implementation wrapping the existing classroom persona
+ * prompt builders. Note: the Game Director (Step 04) uses its own
+ * game-specific templates because classroom builders require live
+ * classroom agent state that game sessions do not have; this adapter
+ * is the bridge for classroom surfaces, tested against the real
+ * builders.
+ */
+export function createPersonaPromptAdapter(): PersonaPromptAdapter {
+  return {
+    buildTeacherPrompt: (args) => ({ prompt: buildTeacherPrompt(args).text }),
+    buildClassmatePrompt: (args) => ({ prompt: buildClassmatePrompt(args).text }),
+  };
 }
 
 export interface VisualizationAdapter {

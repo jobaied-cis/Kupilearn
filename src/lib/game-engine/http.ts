@@ -25,6 +25,7 @@ export async function parseJsonBody(request: Request, maxBytes = MAX_JSON_BODY_B
 export function gameErrorStatus(error: unknown): number {
   if (error instanceof GameEngineError) {
     if (error.code === "PAYLOAD_TOO_LARGE") return 413;
+    if (error.code === "SESSION_EXPIRED") return 410;
     if (error.code === "SESSION_NOT_FOUND" || error.code === "CHALLENGE_NOT_FOUND" || error.code === "MISSION_NOT_FOUND") return 404;
     if (error.code === "INVALID_JSON" || error.code === "INVALID_REQUEST") return 400;
     return 409;

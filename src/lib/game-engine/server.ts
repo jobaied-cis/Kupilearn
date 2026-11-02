@@ -4,7 +4,7 @@ import { toClientChallenge } from "./challenges";
 import type { GameSessionController } from "./session";
 import { GameEngineError, type GameChallenge } from "./types";
 import { AdaptiveDifficulty } from "./adaptive";
-import { InMemoryProgressStore, type LearnerProgress } from "./progress";
+import { createGameProgressAdapter, InMemoryProgressStore, type LearnerProgress } from "./progress";
 import { computeXp, RewardLedger, type ChallengeOutcome } from "./rewards";
 import { resolveChallengeContext, type ChallengeContext } from "./lesson-context";
 import { createClass6MathMisconceptionRegistry, MisconceptionTracker } from "./misconceptions";
@@ -32,9 +32,11 @@ import { recommend } from "./recommendations";
  */
 export const rewardLedger = new RewardLedger();
 export const progressStore = new InMemoryProgressStore();
+/** Connected LearningProgressAdapter over the progress store (Step 07). */
+export const progressAdapter = createGameProgressAdapter(progressStore);
 
 export function getGameProgress(learnerRef: string): LearnerProgress {
-  return progressStore.getProgress(learnerRef || "anonymous-device");
+  return progressAdapter.getProgress(learnerRef || "anonymous-device");
 }
 
 interface ServerSession {
@@ -48,7 +50,11 @@ interface ServerSession {
   hintsByChallenge: Map<string, number>;
 }
 
-const engine = createGameEngine();
+/** Session lifetime: an in-progress game expires after 2 hours (Step 07 resume policy). */
+export const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
+
+// Opaque, unguessable session ids — never sequential.
+const engine = createGameEngine({ idFactory: () => crypto.randomUUID() });
 for (const bundle of PUZZLE_QUEST_MISSIONS) {
   assertValidMission(bundle, new Set(engine.mechanics.list().map((m) => m.id)));
   for (const challenge of bundle.challenges) engine.challenges.register(challenge);
@@ -63,12 +69,52 @@ const sessions = new Map<string, ServerSession>();
  */
 export const MAX_GAME_SESSIONS = 200;
 
-export function pruneSessions(): void {
+export function pruneSessions(nowMs = Date.now()): void {
+  for (const [id, entry] of sessions) {
+    if (nowMs - new Date(entry.controller.getSession().createdAt).getTime() > SESSION_TTL_MS) sessions.delete(id);
+  }
   while (sessions.size > MAX_GAME_SESSIONS) {
     const oldest = sessions.keys().next().value as string | undefined;
     if (oldest === undefined) break;
     sessions.delete(oldest);
   }
+}
+
+/** Live-session lookup: expired sessions are removed and reported, never restored. */
+function liveEntry(sessionId: string): ServerSession {
+  const entry = sessions.get(sessionId);
+  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  if (Date.now() - new Date(entry.controller.getSession().createdAt).getTime() > SESSION_TTL_MS) {
+    sessions.delete(sessionId);
+    throw new GameEngineError("SESSION_EXPIRED", "This game session has expired. Start a new quest.");
+  }
+  return entry;
+}
+
+/**
+ * Resume snapshot (Step 07): everything the client needs to restore a
+ * game after reload — and nothing trusted. No answer keys, no hints
+ * text, no score the client could edit: the server recomputes from
+ * its own session state on every later answer.
+ */
+export function getSessionSnapshot(sessionId: string) {
+  const entry = liveEntry(sessionId);
+  const bundle = PUZZLE_QUEST_MISSIONS.find((b) => b.mission.id === entry.missionId);
+  if (!bundle) throw new GameEngineError("MISSION_NOT_FOUND", `Unknown mission: ${entry.missionId}`);
+  const state = entry.controller.getSession().state;
+  const award = rewardLedger.get(sessionId);
+  return {
+    sessionId,
+    mission: toClientMission(bundle),
+    status: state.status,
+    currentChallengeId: state.challengeIds[state.currentChallengeIndex] ?? null,
+    answeredChallengeIds: state.answeredChallengeIds,
+    correctChallengeIds: state.correctChallengeIds,
+    hintsUsed: state.hintsUsed,
+    result: state.status === "completed" ? entry.controller.result() : null,
+    rewards: award ? { xp: award.xp, badges: award.badges, persistence: "session-only" as const } : null,
+    expiresAt: new Date(new Date(entry.controller.getSession().createdAt).getTime() + SESSION_TTL_MS).toISOString(),
+  };
 }
 
 export function activeSessionCount(): number {
@@ -120,14 +166,11 @@ export function startMissionSession(missionId: string, learnerRef = "anonymous-d
 }
 
 function getController(sessionId: string): GameSessionController {
-  const entry = sessions.get(sessionId);
-  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
-  return entry.controller;
+  return liveEntry(sessionId).controller;
 }
 
 export function submitMissionAnswer(sessionId: string, challengeId: string, answer: unknown) {
-  const entry = sessions.get(sessionId);
-  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const entry = liveEntry(sessionId);
   const controller = entry.controller;
   const challenge = engine.challenges.getServer(challengeId);
   const outcome = controller.attemptAnswer(challengeId, answer, 2);
@@ -187,8 +230,8 @@ export function submitMissionAnswer(sessionId: string, challengeId: string, answ
     const result = controller.result();
     const { award, duplicate } = rewardLedger.award({ sessionId: state.sessionId, missionId: entry.missionId, xp, badges: [], result });
     if (!duplicate) {
-      const before = progressStore.getProgress(entry.learnerRef).badgesEarned;
-      const progress = progressStore.recordSession(entry.learnerRef, {
+      const before = progressAdapter.getProgress(entry.learnerRef).badgesEarned;
+      const progress = progressAdapter.recordSession(entry.learnerRef, {
         sessionId: state.sessionId,
         missionId: entry.missionId,
         completed: true,
@@ -199,7 +242,7 @@ export function submitMissionAnswer(sessionId: string, challengeId: string, answ
       });
       award.badges = progress.badgesEarned.filter((b) => !before.includes(b));
     }
-    const progressNow = progressStore.getProgress(entry.learnerRef);
+    const progressNow = progressAdapter.getProgress(entry.learnerRef);
     rewards = { xp: award.xp, badges: award.badges, totalXp: progressNow.totalXp, persistence: "session-only" };
   }
 
@@ -226,8 +269,7 @@ export function submitMissionAnswer(sessionId: string, challengeId: string, answ
  * data exists in a session to begin with, so none can leak here.
  */
 export function getDirectorContext(sessionId: string, challengeId: string) {
-  const entry = sessions.get(sessionId);
-  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const entry = liveEntry(sessionId);
   const challenge = engine.challenges.getServer(challengeId);
   const bundle = PUZZLE_QUEST_MISSIONS.find((b) => b.mission.id === entry.missionId);
   return {
@@ -244,8 +286,7 @@ export function getDirectorContext(sessionId: string, challengeId: string) {
 }
 
 export function requestMissionHint(sessionId: string, challengeId: string) {
-  const entry = sessions.get(sessionId);
-  if (!entry) throw new GameEngineError("SESSION_NOT_FOUND", `Unknown session: ${sessionId}`);
+  const entry = liveEntry(sessionId);
   const result = entry.controller.requestProgressiveHint(challengeId);
   entry.hintsByChallenge.set(challengeId, (entry.hintsByChallenge.get(challengeId) ?? 0) + 1);
   return result;

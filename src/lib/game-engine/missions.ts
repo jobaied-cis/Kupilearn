@@ -26,6 +26,8 @@ export interface Mission {
   completionCriteria: { requireAllChallenges: true; minCorrect?: number };
   hintsPerChallenge: 3;
   contentStatus: "draft-sample" | "reviewed" | "approved";
+  /** Traceable source reference for the curriculum structure (never a fabricated page). */
+  sourceRef: string;
   challengeIds: string[];
 }
 
@@ -101,6 +103,7 @@ export const FIRST_STEPS_MISSION: MissionBundle = {
     completionCriteria: { requireAllChallenges: true },
     hintsPerChallenge: 3,
     contentStatus: "draft-sample",
+    sourceRef: "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025 — catalog topics c6-math-fractions/equations/angles; questions are original samples",
     challengeIds: ["pq1-seq", "pq1-eq", "pq1-frac", "pq1-shape", "pq1-logic", "pq1-build"],
   },
   challenges: [
@@ -191,4 +194,123 @@ export const FIRST_STEPS_MISSION: MissionBundle = {
   ],
 };
 
-export const PUZZLE_QUEST_MISSIONS: MissionBundle[] = [FIRST_STEPS_MISSION];
+/**
+ * Second demonstration mission (Step 07) — same verified Class 6
+ * structure (fractions Ch. 1, algebraic expressions Ch. 4, simple
+ * equations Ch. 5, geometry Ch. 6), harder challenges, and an
+ * order-matters final build. Still original sample questions:
+ * draft-sample, never NCTB-approved.
+ */
+export const SECOND_STEPS_MISSION: MissionBundle = {
+  mission: {
+    id: "pq-c6-math-second-steps",
+    gameId: "puzzle-quest",
+    title: "Second Steps: Harder Patterns & Equations",
+    description: "A tougher quest: equivalent fractions, two-step equations, shrinking sequences, polygon angles, and building a sequence in exact order.",
+    grade: 6,
+    subjectId: "math",
+    chapterId: "c6-math-number",
+    topicIds: ["c6-math-fractions", "c6-math-equations", "c6-math-angles", "c6-math-algebraic", "c6-math-factors"],
+    learningObjectives: [
+      "Find an equivalent fraction",
+      "Solve a two-step equation",
+      "Continue a decreasing pattern",
+      "Use polygon angle sums",
+      "Build a sequence in exact order",
+    ],
+    estimatedMinutes: 10,
+    completionCriteria: { requireAllChallenges: true },
+    hintsPerChallenge: 3,
+    contentStatus: "draft-sample",
+    sourceRef: "NCTB Mathematics Class Six (English Version), Revised Edition Oct 2025 — catalog topics c6-math-fractions/equations/angles; questions are original samples",
+    challengeIds: ["pq2-frac", "pq2-eq", "pq2-seq", "pq2-shape", "pq2-logic", "pq2-build"],
+  },
+  challenges: [
+    ch({
+      id: "pq2-frac", gameId: "puzzle-quest", mechanicId: "fraction-puzzle", type: "fraction-puzzle",
+      topicId: "c6-math-fractions", grade: 6, subjectId: "math",
+      prompt: "Which fraction is equivalent to 1/2? Answer like 2/4.",
+      payload: { difficulty: 1, mode: "equivalent", fraction: { numerator: 1, denominator: 2 } },
+      difficulty: 1, learningObjective: "Find an equivalent fraction", stage: "warmup",
+      status: "approved", answerKey: "2/4", points: 10,
+      hints: [
+        "Equivalent means the same amount, written differently.",
+        "Multiply the top and bottom of 1/2 by the same number.",
+        "Try doubling both: 1×2 on top and 2×2 on the bottom gives a new name for the same amount.",
+      ],
+      explanation: "Multiplying top and bottom by the same number keeps the amount equal: 1/2 = 2/4 = 3/6.",
+    }),
+    ch({
+      id: "pq2-eq", gameId: "puzzle-quest", mechanicId: "equation-puzzle", type: "equation-puzzle",
+      topicId: "c6-math-equations", grade: 6, subjectId: "math",
+      prompt: "Solve: 2x + 3 = 11. What is x?",
+      payload: { difficulty: 2, equation: "2x + 3 = 11", unknown: "x", a: 2, b: 3, c: 11 },
+      difficulty: 2, learningObjective: "Solve a two-step equation", stage: "main",
+      status: "approved", answerKey: 4, points: 10,
+      hints: [
+        "There are two things to undo: +3 and ×2. Which comes off first?",
+        "Undo +3 first: subtract 3 from both sides. Now you have 2x alone on one side.",
+        "After subtracting, 2x = 8. Split 8 into 2 equal parts to find one x.",
+      ],
+      explanation: "Subtract 3: 2x = 8. Divide by 2: x = 4. Check: 2×4 + 3 = 11. Correct.",
+    }),
+    ch({
+      id: "pq2-seq", gameId: "puzzle-quest", mechanicId: "number-sequence", type: "number-sequence",
+      topicId: "c6-math-factors", grade: 6, subjectId: "math",
+      prompt: "Find the missing number: 20, 15, ?, 5, 0",
+      payload: { difficulty: 2, sequence: [20, 15, null, 5, 0], missingIndex: 2 },
+      difficulty: 2, learningObjective: "Continue a decreasing pattern", stage: "main",
+      status: "approved", answerKey: 10, points: 10,
+      hints: [
+        "This pattern goes down instead of up. How much does it drop each step?",
+        "20 → 15 drops by 5. Keep dropping by the same amount.",
+        "After 15, drop 5 once more. Count back five from 15.",
+      ],
+      explanation: "The rule is −5 each step: 20, 15, 10, 5, 0. The missing number is 10.",
+    }),
+    ch({
+      id: "pq2-shape", gameId: "puzzle-quest", mechanicId: "shape-puzzle", type: "shape-puzzle",
+      topicId: "c6-math-angles", grade: 6, subjectId: "math",
+      prompt: "The inside angles of a pentagon add up to how many degrees?",
+      payload: { difficulty: 2, shape: "pentagon", ask: "angleSum" },
+      difficulty: 2, learningObjective: "Use polygon angle sums", stage: "main",
+      status: "approved", answerKey: 540, points: 10,
+      hints: [
+        "A triangle's angles add to 180°. Bigger polygons can be split into triangles.",
+        "A pentagon splits into 3 triangles. Multiply 3 by 180.",
+        "3 × 180: think of it as 180 + 180 + 180, added step by step.",
+      ],
+      explanation: "A pentagon splits into 3 triangles, so its angles add to 3 × 180° = 540°.",
+    }),
+    ch({
+      id: "pq2-logic", gameId: "puzzle-quest", mechanicId: "logic-puzzle", type: "logic-puzzle",
+      topicId: "c6-math-factors", grade: 6, subjectId: "math",
+      prompt: "A number is even, bigger than 5, and smaller than 9. Which number is it?",
+      payload: { difficulty: 2, options: ["5", "6", "7", "9"] },
+      difficulty: 2, learningObjective: "Reason step by step from clues", stage: "main",
+      status: "approved", answerKey: "6", points: 10,
+      hints: [
+        "Use one clue at a time and cross out what cannot fit.",
+        "Bigger than 5 and smaller than 9 leaves only two candidates. Which one is even?",
+        "Between 5 and 9 we have 6, 7, 8 — and only one of the listed answers is an even number there.",
+      ],
+      explanation: "Between 5 and 9 the options give 6 and 7; only 6 is even. The number is 6.",
+    }),
+    ch({
+      id: "pq2-build", gameId: "puzzle-quest", mechanicId: "drag-build", type: "drag-build",
+      topicId: "c6-math-algebraic", grade: 6, subjectId: "math",
+      prompt: "Build the counting-by-twos sequence in exact order, starting from 2.",
+      payload: { difficulty: 2, tiles: ["6", "2", "8", "4"], instruction: "Arrange the tiles in exact order: 2, 4, 6, 8", buildKind: "ordered", orderMatters: true },
+      difficulty: 2, learningObjective: "Build a sequence in exact order", stage: "final",
+      status: "approved", answerKey: ["2", "4", "6", "8"], points: 15,
+      hints: [
+        "This time the order itself is the answer. Start with the smallest number.",
+        "Count by twos starting at 2. Each next tile is 2 more.",
+        "2 comes first, then add 2 each time: the sequence climbs evenly to 8.",
+      ],
+      explanation: "Counting by twos from 2 gives 2, 4, 6, 8 — in that exact order.",
+    }),
+  ],
+};
+
+export const PUZZLE_QUEST_MISSIONS: MissionBundle[] = [FIRST_STEPS_MISSION, SECOND_STEPS_MISSION];

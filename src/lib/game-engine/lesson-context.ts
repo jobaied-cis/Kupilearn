@@ -1,6 +1,9 @@
 import { offlineLesson } from "../lesson/engine";
+import { createVisualizationAdapter } from "./adapters";
 import { resolveCurriculumContext, type CurriculumContext } from "./curriculum-context";
 import type { GameChallenge } from "./types";
+
+const visualizationAdapter = createVisualizationAdapter();
 
 /**
  * Lesson & Context integration (Step 03): connects a game challenge
@@ -20,6 +23,8 @@ export interface ChallengeContext {
   missionContext: string;
   /** Progressive hints are served separately by the session API. */
   hintLevelsAvailable: number;
+  /** First visualization instruction kind from the lesson engine, when present. */
+  visualizationKind?: string;
   /** "lesson-engine" when real lesson context resolved, else "static-fallback". */
   contextSource: "lesson-engine" | "static-fallback";
 }
@@ -41,6 +46,7 @@ export function resolveChallengeContext(input: {
   try {
     const lesson = offlineLesson(challenge.grade, challenge.topicId);
     const firstExplanation = lesson.explanations[0];
+    const firstBoardStep = lesson.explanations.flatMap((e) => e.board)[0];
     return {
       curriculum,
       conceptExplanation: firstExplanation ? `${firstExplanation.title}: ${firstExplanation.body}` : lesson.introduction,
@@ -48,6 +54,7 @@ export function resolveChallengeContext(input: {
       prerequisites: curriculum?.prerequisites ?? [],
       missionContext,
       hintLevelsAvailable: input.hintLevels ?? 0,
+      visualizationKind: firstBoardStep ? visualizationAdapter.describe(firstBoardStep) : undefined,
       contextSource: "lesson-engine",
     };
   } catch {

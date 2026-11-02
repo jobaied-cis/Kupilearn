@@ -95,6 +95,34 @@ export class InMemoryProgressStore implements GameProgressStore {
   }
 }
 
+/**
+ * Connected LearningProgressAdapter (Step 07): wraps a real
+ * GameProgressStore. The Step 01 contract's counts-only
+ * `recordGameResult` cannot create trusted challenge outcomes, so it
+ * deliberately records nothing on its own; trusted recording goes
+ * through `recordSession`, which the game server calls with
+ * server-validated outcomes.
+ */
+export function createGameProgressAdapter(store: GameProgressStore) {
+  return {
+    async recordGameResult(_input: { learnerRef: string; gameId: string; correct: number; answered: number }): Promise<void> {
+      void _input;
+      /* Counts alone are not trusted evidence; see recordSession. */
+    },
+    async weakTopicIds(_learnerRef: string): Promise<string[]> {
+      void _learnerRef;
+      return [];
+    },
+    recordSession(learnerRef: string, record: SessionProgressRecord): LearnerProgress {
+      return store.recordSession(learnerRef, record);
+    },
+    getProgress(learnerRef: string): LearnerProgress {
+      return store.getProgress(learnerRef);
+    },
+  };
+}
+export type GameProgressAdapter = ReturnType<typeof createGameProgressAdapter>;
+
 /** Deterministic next-activity recommendation from progress (no AI). */
 export function recommendNextMission(progress: LearnerProgress, missionIds: string[]): { missionId: string | null; reason: string } {
   const next = missionIds.find((id) => !progress.missionsCompleted.includes(id));

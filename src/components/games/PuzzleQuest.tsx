@@ -5,6 +5,7 @@ import { Icon } from "../Icon";
 import { pick, useLang } from "../../lib/i18n";
 import type { GameChallenge, GameResult } from "../../lib/game-engine/types";
 import type { ClientMission } from "../../lib/game-engine/server";
+import { insertTile, moveTile, removeTileAt } from "../../lib/game-engine/mechanics/drag-build";
 
 const CARD = "rounded-2xl border-2 border-ink bg-white shadow-hard-sm";
 const BTN = "inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-flame px-4 py-2 text-sm font-bold text-night shadow-hard-sm transition-transform hover:-translate-y-px active:translate-y-0.5 active:shadow-none disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink motion-reduce:transition-none";
@@ -65,6 +66,8 @@ export function PuzzleQuest() {
   const [badgeDefs, setBadgeDefs] = useState<{ id: string; name: string; nameBn: string; description: string; icon: string }[]>([]);
   const [nextMission, setNextMission] = useState<{ missionId: string | null; reason: string } | null>(null);
   const [sessionRewards, setSessionRewards] = useState<AnswerOutcome["rewards"]>(null);
+  const [resumeOffer, setResumeOffer] = useState<{ sessionId: string; mission: ClientMission; status: string; answered: number } | null>(null);
+  const [resumeNote, setResumeNote] = useState<string | null>(null);
 
   const learnerRef = useCallback((): string => {
     try {
@@ -90,6 +93,39 @@ export function PuzzleQuest() {
     } catch { /* progress is a summary; the game itself never depends on it */ }
   }, [learnerRef]);
 
+  const savePointer = useCallback((sessionIdValue: string, missionId: string) => {
+    try {
+      window.localStorage.setItem("kupi-pq-active", JSON.stringify({ sessionId: sessionIdValue, missionId }));
+    } catch { /* storage unavailable: resume simply will not be offered */ }
+  }, []);
+
+  const clearPointer = useCallback(() => {
+    try {
+      window.localStorage.removeItem("kupi-pq-active");
+    } catch { /* ignore */ }
+  }, []);
+
+  const checkResume = useCallback(async () => {
+    try {
+      const raw = window.localStorage.getItem("kupi-pq-active");
+      if (!raw) return;
+      const pointer = JSON.parse(raw) as { sessionId?: unknown };
+      if (typeof pointer.sessionId !== "string") return;
+      const res = await fetch(`/api/games/sessions/${pointer.sessionId}`);
+      if (!res.ok) {
+        clearPointer();
+        if (res.status === 410) setResumeNote(pick(lang, "Your previous game expired, so it cannot be resumed. Start a fresh quest below.", "তোমার আগের খেলার মেয়াদ শেষ, তাই আবার শুরু করা যাবে না। নিচে নতুন অভিযান শুরু করো।"));
+        return;
+      }
+      const snap = (await res.json()) as { sessionId: string; mission: ClientMission; status: string; answeredChallengeIds: string[] };
+      if (snap.status === "playing" || snap.status === "paused") {
+        setResumeOffer({ sessionId: snap.sessionId, mission: snap.mission, status: snap.status, answered: snap.answeredChallengeIds.length });
+      } else {
+        clearPointer();
+      }
+    } catch { /* resume is a convenience; the landing works without it */ }
+  }, [clearPointer, lang]);
+
   const load = useCallback(async () => {
     try {
       setLoadFailed(false);
@@ -97,10 +133,35 @@ export function PuzzleQuest() {
       const data = (await res.json()) as { missions: ClientMission[] };
       setMissions(data.missions);
       void loadProgress();
+      void checkResume();
     } catch {
       setLoadFailed(true);
     }
-  }, [loadProgress]);
+  }, [loadProgress, checkResume]);
+
+  async function resumeGame() {
+    if (!resumeOffer) return;
+    try {
+      const res = await fetch(`/api/games/sessions/${resumeOffer.sessionId}`);
+      if (!res.ok) throw new Error("expired");
+      const snap = (await res.json()) as { mission: ClientMission; status: string; currentChallengeId: string | null; answeredChallengeIds: string[] };
+      setMission(snap.mission);
+      setSessionId(resumeOffer.sessionId);
+      setCurrentId(snap.currentChallengeId);
+      setAnswered(snap.answeredChallengeIds.length);
+      setPaused(snap.status === "paused");
+      setResult(null);
+      setSessionRewards(null);
+      setGuidance(null);
+      resetAnswerInputs();
+      setResumeOffer(null);
+      setStage("playing");
+    } catch {
+      clearPointer();
+      setResumeOffer(null);
+      setResumeNote(pick(lang, "That game could not be resumed. Start a fresh quest below.", "সেই খেলাটি আবার শুরু করা যায়নি। নিচে নতুন অভিযান শুরু করো।"));
+    }
+  }
 
   useEffect(() => {
     const id = requestAnimationFrame(() => void load());
@@ -129,6 +190,7 @@ export function PuzzleQuest() {
       const data = (await res.json()) as { sessionId: string; mission: ClientMission };
       setMission(data.mission);
       setSessionId(data.sessionId);
+      savePointer(data.sessionId, data.mission.id);
       setCurrentId(data.mission.challenges[0]?.id ?? null);
       setAnswered(0);
       setResult(null);
@@ -169,6 +231,7 @@ export function PuzzleQuest() {
         return;
       }
       if (outcome.result) {
+        clearPointer();
         setResult(outcome.result);
         setSessionRewards(outcome.rewards ?? null);
         void loadProgress();
@@ -373,6 +436,9 @@ export function PuzzleQuest() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi(aiPersona === "ai-teacher" ? "GENERATE_HINT" : "START_CLASSMATE_DISCUSSION")}>{pick(lang, "Ask for a hint", "সূত্র চাও")}</button>
                 <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("EXPLAIN_CONCEPT")}>{pick(lang, "Explain the idea", "ধারণাটি বোঝাও")}</button>
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("EXPLAIN_MISTAKE")}>{pick(lang, "Why was I wrong?", "কেন ভুল হলো?")}</button>
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("ASK_GUIDING_QUESTION")}>{pick(lang, "Guide me", "পথ দেখাও")}</button>
+                <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("SUMMARIZE_LEARNING")}>{pick(lang, "Summarize my learning", "আমার শেখার সারসংক্ষেপ")}</button>
                 <button type="button" className={BTN_GHOST} disabled={aiBusy} onClick={() => void askAi("ENCOURAGE_LEARNER")}>{pick(lang, "Encourage me", "উৎসাহ দাও")}</button>
               </div>
               {aiBusy ? <p className="mt-2 text-xs text-ink-muted" role="status">{pick(lang, "Thinking…", "ভাবছে…")}</p> : null}
@@ -428,6 +494,16 @@ export function PuzzleQuest() {
           </div>
         ) : null}
       </div>
+      {resumeNote ? <p className={`${CARD} px-4 py-3 text-sm font-semibold text-ink-soft`} role="status">{resumeNote}</p> : null}
+      {resumeOffer ? (
+        <div className={`${CARD} flex flex-wrap items-center justify-between gap-2 border-lagoon p-4`} role="status">
+          <p className="text-sm font-semibold text-ink">{pick(lang, `You have a game in progress: ${resumeOffer.mission.title} (${resumeOffer.answered}/${resumeOffer.mission.challenges.length} done)`, `তোমার একটি খেলা চলছে: ${resumeOffer.mission.title} (${resumeOffer.answered}/${resumeOffer.mission.challenges.length} শেষ)`)}</p>
+          <span className="flex gap-2">
+            <button type="button" className={BTN} onClick={() => void resumeGame()}>{pick(lang, "Resume game", "খেলা আবার শুরু করো")}</button>
+            <button type="button" className={BTN_GHOST} onClick={() => { clearPointer(); setResumeOffer(null); }}>{pick(lang, "Discard", "বাদ দাও")}</button>
+          </span>
+        </div>
+      ) : null}
       <ul className="grid gap-3 sm:grid-cols-2">
         {missions.map((m) => (
           <li key={m.id} className={`${CARD} flex flex-col gap-2 p-4`}>
@@ -463,6 +539,7 @@ function ChallengeInput({ challenge, payload, answer, setAnswer, selected, setSe
   setPlaced: (v: string[]) => void;
   lang: "en" | "bn";
 }) {
+  const [dragOver, setDragOver] = useState(false);
   const inputCls = "mt-3 w-full max-w-xs rounded-xl border-2 border-paper-edge bg-paper px-3 py-2 text-lg font-bold text-ink focus:border-ink focus:outline-none";
 
   if (challenge.mechanicId === "number-sequence") {
@@ -518,22 +595,56 @@ function ChallengeInput({ challenge, payload, answer, setAnswer, selected, setSe
     return (
       <div>
         <p className="mt-2 text-sm text-ink-soft">{String(payload.instruction ?? "")}</p>
-        <div className="mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-xl border-2 border-dashed border-paper-edge bg-paper px-2 py-2" aria-label={pick(lang, "Your build", "তোমার তৈরি")}>
-          {placed.length === 0 ? <span className="text-sm text-ink-muted">{pick(lang, "Tap tiles below to build…", "তৈরি করতে নিচের টাইল চাপ দাও…")}</span> : placed.map((tile, i) => (
-            <span key={`${tile}-${i}`} className="inline-flex items-center gap-1 rounded-lg border-2 border-ink bg-white px-2 py-1 font-display text-lg font-bold text-ink">
+        <div
+          className={`mt-3 flex min-h-12 flex-wrap items-center gap-2 rounded-xl border-2 border-dashed px-2 py-2 ${dragOver ? "border-ink bg-lagoon-soft" : "border-paper-edge bg-paper"}`}
+          aria-label={pick(lang, "Your build", "তোমার তৈরি")}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            const tile = e.dataTransfer.getData("text/kupi-tile");
+            const from = Number(e.dataTransfer.getData("text/kupi-placed-index"));
+            if (tile) setPlaced([...placed, tile]);
+            else if (Number.isInteger(from) && placed[from]) setPlaced(moveTile(placed, from, placed.length - 1));
+          }}
+        >
+          {placed.length === 0 ? <span className="text-sm text-ink-muted">{pick(lang, "Drag tiles here, or tap them below…", "টাইল এখানে টেনে আনো, অথবা নিচে চাপ দাও…")}</span> : placed.map((tile, i) => (
+            <span
+              key={`${tile}-${i}`}
+              draggable
+              onDragStart={(e) => { e.dataTransfer.setData("text/kupi-placed-index", String(i)); e.dataTransfer.effectAllowed = "move"; }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const from = Number(e.dataTransfer.getData("text/kupi-placed-index"));
+                const newTile = e.dataTransfer.getData("text/kupi-tile");
+                if (newTile) setPlaced(insertTile(placed, newTile, i));
+                else if (Number.isInteger(from)) setPlaced(moveTile(placed, from, i));
+              }}
+              className="inline-flex cursor-grab items-center gap-1 rounded-lg border-2 border-ink bg-white px-2 py-1 font-display text-lg font-bold text-ink active:cursor-grabbing"
+            >
               {tile}
-              <button type="button" aria-label={pick(lang, `Move ${tile} left`, `${tile} বামে সরাও`)} className="px-1 text-sm" onClick={() => { if (i > 0) { const next = [...placed]; [next[i - 1], next[i]] = [next[i]!, next[i - 1]!]; setPlaced(next); } }}>←</button>
-              <button type="button" aria-label={pick(lang, `Move ${tile} right`, `${tile} ডানে সরাও`)} className="px-1 text-sm" onClick={() => { if (i < placed.length - 1) { const next = [...placed]; [next[i + 1], next[i]] = [next[i]!, next[i + 1]!]; setPlaced(next); } }}>→</button>
-              <button type="button" aria-label={pick(lang, `Remove ${tile}`, `${tile} সরিয়ে দাও`)} className="px-1 text-sm" onClick={() => setPlaced(placed.filter((_, j) => j !== i))}>×</button>
+              <button type="button" aria-label={pick(lang, `Move ${tile} left`, `${tile} বামে সরাও`)} className="px-1 text-sm" onClick={() => setPlaced(moveTile(placed, i, i - 1))}>←</button>
+              <button type="button" aria-label={pick(lang, `Move ${tile} right`, `${tile} ডানে সরাও`)} className="px-1 text-sm" onClick={() => setPlaced(moveTile(placed, i, i + 1))}>→</button>
+              <button type="button" aria-label={pick(lang, `Remove ${tile}`, `${tile} সরিয়ে দাও`)} className="px-1 text-sm" onClick={() => setPlaced(removeTileAt(placed, i))}>×</button>
             </span>
           ))}
         </div>
         <div className="mt-2 flex flex-wrap gap-2" aria-label={pick(lang, "Tiles", "টাইল")}>
           {available.map((tile, i) => (
-            <button key={`${tile}-${i}`} type="button" className="rounded-lg border-2 border-ink bg-flame px-3 py-1.5 font-display text-lg font-bold text-night" onClick={() => setPlaced([...placed, tile])}>{tile}</button>
+            <button
+              key={`${tile}-${i}`}
+              type="button"
+              draggable
+              onDragStart={(e) => { e.dataTransfer.setData("text/kupi-tile", tile); e.dataTransfer.effectAllowed = "copy"; }}
+              className="cursor-grab rounded-lg border-2 border-ink bg-flame px-3 py-1.5 font-display text-lg font-bold text-night active:cursor-grabbing"
+              onClick={() => setPlaced(insertTile(placed, tile))}
+            >{tile}</button>
           ))}
         </div>
-        <p className="mt-2 text-xs text-ink-muted">{pick(lang, "Keyboard: Tab to a placed tile, then use the ← → buttons to reorder.", "কীবোর্ড: Tab দিয়ে রাখা টাইলে যাও, তারপর ← → বোতামে সাজাও।")}</p>
+        <p className="mt-2 text-xs text-ink-muted">{pick(lang, "Drag tiles into the box, tap to place, or use a keyboard: Tab to a placed tile, then the ← → buttons reorder it.", "টাইল টেনে বাক্সে রাখো, চাপ দিয়েও রাখতে পারো, অথবা কীবোর্ডে: Tab দিয়ে রাখা টাইলে গিয়ে ← → বোতামে সাজাও।")}</p>
       </div>
     );
   }
