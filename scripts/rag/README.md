@@ -50,6 +50,16 @@ vectors are stored in the JSONL `embedding` field, model
 `local:hash-tf-256`, 256 dimensions — keep the schema dimension in sync if
 you switch to sbert, 384 dimensions).
 
+## Vercel service (internal)
+
+`app.py` in this directory is the `rag` Vercel service (see the repo-root
+`vercel.json`): a stdlib-only ASGI app serving `GET /health` and
+`POST /retrieve` over the chunks above. It is internal — no public
+rewrite targets it. The Next.js `app` service calls it via the `RAG_URL`
+binding (`src/lib/rag/remote.ts`), falling back to in-process retrieval
+when the binding is absent. Test it with
+`python -m unittest discover -s scripts/rag -p "test_*.py"`.
+
 ## Guarantees
 
 - Every chunk carries class, chapter, book page and source.

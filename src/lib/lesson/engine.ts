@@ -4,6 +4,7 @@ import { createLLMClient } from "../curriculum/llm";
 import { isMetaConfigured } from "../meta/meta-client";
 import { findTopic, firstTopic } from "../nctb/catalog";
 import { retrieve, type RetrievedPassage } from "../rag/retrieve";
+import { retrieveRemote } from "../rag/remote";
 import { getMathChapter } from "../nctb/math-book";
 
 /**
@@ -140,7 +141,11 @@ export async function generateLesson(
       summary: `${mathChapter.title}: ${mathChapter.objectives.join(" ")} (Source: ${mathChapter.source}.)`,
     };
   }
-  const sources = retrieve(input.query ?? `${fallback.chapter} ${fallback.topic}`, {
+  const ragQuery = input.query ?? `${fallback.chapter} ${fallback.topic}`;
+  const ragOpts = { classLevel: input.classLevel, chapterId: input.chapterId, limit: 8 };
+  // Via the RAG_URL service binding when deployed (runtime, functions
+  // only); in-process retrieval over the same chunks otherwise.
+  const sources = (await retrieveRemote(ragQuery, ragOpts)) ?? retrieve(ragQuery, {
     classLevel: input.classLevel,
     chapterId: input.chapterId,
     limit: 8,
